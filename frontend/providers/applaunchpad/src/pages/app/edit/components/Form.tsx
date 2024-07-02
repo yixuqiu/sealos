@@ -413,7 +413,7 @@ const Form = ({
                       required: t('Not allowed to change app name') || '',
                       maxLength: 60,
                       pattern: {
-                        value: /^[a-z][a-z0-9]+([-.][a-z0-9]+)*$/g,
+                        value: /[a-z]([-a-z0-9]*[a-z0-9])?/g,
                         message: t(
                           'The application name can contain only lowercase letters, digits, and hyphens (-) and must start with a letter'
                         )
@@ -460,7 +460,7 @@ const Form = ({
                       backgroundColor={getValues('imageName') ? 'myWhite.500' : 'grayModern.100'}
                       placeholder={`${t('Image Name')}`}
                       {...register('imageName', {
-                        required: 'Image name cannot be empty.',
+                        required: 'Image name cannot be empty',
                         setValueAs(e) {
                           return e.replace(/\s*/g, '');
                         }

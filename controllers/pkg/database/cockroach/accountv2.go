@@ -166,6 +166,11 @@ func (c *Cockroach) GetAccount(ops *types.UserQueryOpts) (*types.Account, error)
 	return c.getAccount(ops)
 }
 
+func (c *Cockroach) SetAccountCreateLocalRegion(account *types.Account, region string) error {
+	account.CreateRegionID = region
+	return c.DB.Save(account).Error
+}
+
 func (c *Cockroach) GetTransfer(ops *types.UserQueryOpts) ([]types.Transfer, error) {
 	userUID, err := c.GetUserUID(ops)
 	if err != nil {
@@ -230,7 +235,7 @@ func (c *Cockroach) getAccount(ops *types.UserQueryOpts) (*types.Account, error)
 	return &account, nil
 }
 
-func (c *Cockroach) GetUserOauthProvider(ops *types.UserQueryOpts) (*types.OauthProvider, error) {
+func (c *Cockroach) GetUserOauthProvider(ops *types.UserQueryOpts) ([]types.OauthProvider, error) {
 	if ops.UID == uuid.Nil {
 		user, err := c.GetUserCr(ops)
 		if err != nil {
@@ -238,14 +243,14 @@ func (c *Cockroach) GetUserOauthProvider(ops *types.UserQueryOpts) (*types.Oauth
 		}
 		ops.UID = user.UserUID
 	}
-	var provider types.OauthProvider
-	if err := c.DB.Where(types.OauthProvider{UserUID: ops.UID}).First(&provider).Error; err != nil {
+	var provider []types.OauthProvider
+	if err := c.DB.Where(types.OauthProvider{UserUID: ops.UID}).Find(&provider).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("failed to get user oauth provider: %v", err)
 	}
-	return &provider, nil
+	return provider, nil
 }
 
 func (c *Cockroach) updateBalance(tx *gorm.DB, ops *types.UserQueryOpts, amount int64, isDeduction, add bool) error {
@@ -608,6 +613,7 @@ func (c *Cockroach) NewAccount(ops *types.UserQueryOpts) (*types.Account, error)
 		EncryptBalance:          c.ZeroAccount.EncryptBalance,
 		Balance:                 c.ZeroAccount.Balance,
 		DeductionBalance:        c.ZeroAccount.DeductionBalance,
+		CreateRegionID:          c.LocalRegion.UID.String(),
 		CreatedAt:               time.Now(),
 	}
 

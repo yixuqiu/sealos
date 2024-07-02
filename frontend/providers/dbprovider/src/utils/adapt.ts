@@ -1,5 +1,5 @@
 import { BACKUP_REMARK_LABEL_KEY, BackupTypeEnum, backupStatusMap } from '@/constants/backup';
-import { MigrationRemark, dbStatusMap } from '@/constants/db';
+import { DBStatusEnum, MigrationRemark, dbStatusMap } from '@/constants/db';
 import type { AutoBackupFormType, BackupCRItemType } from '@/types/backup';
 import type { KbPgClusterType, KubeBlockBackupPolicyType } from '@/types/cluster';
 import type { DBDetailType, DBEditType, DBListItemType, PodDetailType, PodEvent } from '@/types/db';
@@ -7,6 +7,7 @@ import { InternetMigrationCR, MigrateItemType } from '@/types/migrate';
 import {
   convertCronTime,
   cpuFormatToM,
+  decodeFromHex,
   formatPodTime,
   formatTime,
   memoryFormatToMi,
@@ -33,7 +34,8 @@ export const adaptDBListItem = (db: KbPgClusterType): DBListItemType => {
       db.spec?.componentSpecs?.[0]?.volumeClaimTemplates?.[0]?.spec?.resources?.requests?.storage ||
       '-',
     conditions: db?.status?.conditions || [],
-    isDiskSpaceOverflow: false
+    isDiskSpaceOverflow: false,
+    labels: db.metadata.labels || {}
   };
 };
 
@@ -55,7 +57,8 @@ export const adaptDBDetail = (db: KbPgClusterType): DBDetailType => {
       db.spec?.componentSpecs?.[0]?.volumeClaimTemplates?.[0]?.spec?.resources?.requests?.storage
     ),
     conditions: db?.status?.conditions || [],
-    isDiskSpaceOverflow: false
+    isDiskSpaceOverflow: false,
+    labels: db.metadata.labels || {}
   };
 };
 
@@ -150,17 +153,19 @@ export const adaptEvents = (events: CoreV1EventList): PodEvent[] => {
 export const adaptBackup = (backup: BackupCRItemType): BackupItemType => {
   const autoLabel = 'dataprotection.kubeblocks.io/autobackup';
   const passwordLabel = 'dataprotection.kubeblocks.io/connection-password';
+  const remark = backup.metadata.labels[BACKUP_REMARK_LABEL_KEY];
 
   return {
     id: backup.metadata.uid,
     name: backup.metadata.name,
+    namespace: backup.metadata.namespace,
     status:
       backup.status?.phase && backupStatusMap[backup.status.phase]
         ? backupStatusMap[backup.status.phase]
         : backupStatusMap.UnKnow,
     startTime: backup.metadata.creationTimestamp,
     type: autoLabel in backup.metadata.labels ? BackupTypeEnum.auto : BackupTypeEnum.manual,
-    remark: backup.metadata.labels[BACKUP_REMARK_LABEL_KEY] || '-',
+    remark: remark ? decodeFromHex(remark) : '-',
     failureReason: backup.status?.failureReason,
     connectionPassword: backup.metadata?.annotations?.[passwordLabel]
   };

@@ -4,16 +4,17 @@ import { useLoading } from '@/hooks/useLoading';
 import { useToast } from '@/hooks/useToast';
 import { useGlobalStore } from '@/store/global';
 import { CloudServerType, EditForm } from '@/types/cloudserver';
+import { CVMChargeType } from '@/types/region';
 import { serviceSideProps } from '@/utils/i18n';
 import { Box, Flex } from '@chakra-ui/react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'next-i18next';
 import { useRouter } from 'next/router';
 import { useCallback, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { FormProvider, useForm } from 'react-hook-form';
 import ErrorModal from './components/ErrorModal';
 import Form from './components/Form';
-import Header from './components/Header';
+import Header, { CostTipContent } from './components/Header';
 
 export default function EditOrder() {
   const [errorMessage, setErrorMessage] = useState('');
@@ -25,26 +26,26 @@ export default function EditOrder() {
   const { lastRoute } = useGlobalStore();
   const [instanceType, setInstanceType] = useState<CloudServerType>();
 
-  const { openConfirm, ConfirmChild } = useConfirm({
-    content: t('Are you sure to create a cloud host?')
-  });
-
   // form
   const formHook = useForm<EditForm>({
     defaultValues: {
       system: 'ubuntu',
-      systemDiskSize: 50,
       publicIpAssigned: false,
       internetMaxBandWidthOut: 1,
       storages: [
         {
           use: 'SystemDisk',
-          size: 50,
+          size: 20,
           amount: 1
         }
       ],
-      virtualMachinePackageFamily: 'A',
-      systemImageId: ''
+      systemImageId: '',
+      period: '1'
+      // chargeType: CVMChargeType.postPaidByHour,
+      // zone: 'Guangzhou-6',
+      // virtualMachineArch: 'x86_64',
+      // virtualMachineType: 'costEffective',
+      // virtualMachinePackageFamily: 'A'
     }
   });
 
@@ -53,15 +54,21 @@ export default function EditOrder() {
     setForceUpdate(!forceUpdate);
   });
 
-  const { data: prices } = useQuery(['getCloudServerPrice', forceUpdate], () => {
-    const temp = formHook.getValues();
-    return getCloudServerPrice(temp);
-  });
+  const { data: prices } = useQuery(
+    ['getCloudServerPrice', forceUpdate],
+    () => {
+      const temp = formHook.getValues();
+      return getCloudServerPrice(temp);
+    },
+    {
+      enabled: !!formHook.getValues('virtualMachinePackageName')
+    }
+  );
 
   const submitSuccess = async (data: EditForm) => {
+    console.log(data);
     setIsLoading(true);
     try {
-      console.log(data);
       await createCloudServer(data);
       toast({
         status: 'success',
@@ -93,6 +100,23 @@ export default function EditOrder() {
     });
   }, [formHook.formState.errors, t, toast]);
 
+  const { openConfirm, ConfirmChild } = useConfirm({
+    content: (
+      <Box>
+        {formHook.getValues('chargeType') === CVMChargeType.prePaid ? (
+          <CostTipContent
+            isMonth={formHook.getValues('chargeType') === CVMChargeType.prePaid}
+            instanceType={instanceType}
+            isModalTip
+            prices={prices}
+          />
+        ) : (
+          <Box>{t('Are you sure to create a cloud host?')}</Box>
+        )}
+      </Box>
+    )
+  });
+
   return (
     <Box
       flexDirection={'column'}
@@ -103,16 +127,20 @@ export default function EditOrder() {
       bg={'grayModern.100'}
     >
       <Header
+        isMonth={formHook.getValues('chargeType') === CVMChargeType.prePaid}
         instanceType={instanceType}
         prices={prices}
         title="New Server"
-        applyCb={() =>
-          formHook.handleSubmit((data) => openConfirm(() => submitSuccess(data))(), submitError)()
-        }
+        applyCb={() => {
+          formHook.handleSubmit((data) => openConfirm(() => submitSuccess(data))(), submitError)();
+          // openConfirm()();
+        }}
         applyBtnText="Submit"
       />
       <Flex h={'calc(100% - 126px)'} justifyContent={'center'} borderRadius={'4px'}>
-        <Form formHook={formHook} refresh={forceUpdate} setInstanceType={setInstanceType} />
+        <FormProvider {...formHook}>
+          <Form refresh={forceUpdate} setInstanceType={setInstanceType} />
+        </FormProvider>
       </Flex>
       <ConfirmChild />
       <Loading />

@@ -1,8 +1,6 @@
 import DesktopContent from '@/components/desktop_content';
-import FloatButton from '@/components/floating_button';
-import MoreApps from '@/components/more_apps';
 import useAppStore from '@/stores/app';
-import { useSystemConfigStore } from '@/stores/config';
+import { useConfigStore } from '@/stores/config';
 import useSessionStore from '@/stores/session';
 import { parseOpenappQuery } from '@/utils/format';
 import { setInviterId } from '@/utils/sessionConfig';
@@ -14,6 +12,8 @@ import { useRouter } from 'next/router';
 import Script from 'next/script';
 import { createContext, useEffect, useState } from 'react';
 import useCallbackStore from '@/stores/callback';
+import FloatButton from '@/components/floating_button';
+import 'react-contexify/dist/ReactContexify.css';
 
 const destination = '/signin';
 interface IMoreAppsContext {
@@ -21,14 +21,16 @@ interface IMoreAppsContext {
   setShowMoreApps: (value: boolean) => void;
 }
 export const MoreAppsContext = createContext<IMoreAppsContext | null>(null);
+
 export default function Home({ sealos_cloud_domain }: { sealos_cloud_domain: string }) {
   const router = useRouter();
   const { isUserLogin } = useSessionStore();
   const { colorMode, toggleColorMode } = useColorMode();
   const init = useAppStore((state) => state.init);
   const setAutoLaunch = useAppStore((state) => state.setAutoLaunch);
-  const { systemConfig } = useSystemConfigStore();
+  const { layoutConfig } = useConfigStore();
   const { workspaceInviteCode, setWorkspaceInviteCode } = useCallbackStore();
+
   useEffect(() => {
     colorMode === 'dark' ? toggleColorMode() : null;
   }, [colorMode, toggleColorMode]);
@@ -96,29 +98,29 @@ export default function Home({ sealos_cloud_domain }: { sealos_cloud_domain: str
       return;
     }
   }, [workspaceInviteCode]);
+
   return (
     <Box position={'relative'} overflow={'hidden'} w="100vw" h="100vh">
       <Head>
-        <title>{systemConfig?.metaTitle}</title>
-        <meta name="description" content={systemConfig?.metaTitle} />
+        <title>{layoutConfig?.meta.title}</title>
+        <meta name="description" content={layoutConfig?.meta.description} />
       </Head>
-      {systemConfig?.scripts?.map((item, i) => {
+      {layoutConfig?.meta.scripts?.map((item, i) => {
         return <Script key={i} {...item} />;
       })}
       <MoreAppsContext.Provider value={{ showMoreApps, setShowMoreApps }}>
         <DesktopContent />
-        <FloatButton />
-        <MoreApps />
       </MoreAppsContext.Provider>
     </Box>
   );
 }
 
-export async function getServerSideProps({ req, res, locales, query }: any) {
+export async function getServerSideProps({ req, res, locales }: any) {
   const local =
     req?.cookies?.NEXT_LOCALE || compareFirstLanguages(req?.headers?.['accept-language'] || 'zh');
   res.setHeader('Set-Cookie', `NEXT_LOCALE=${local}; Max-Age=2592000; Secure; SameSite=None`);
-  const sealos_cloud_domain = process.env.SEALOS_CLOUD_DOMAIN || 'cloud.sealos.io';
+
+  const sealos_cloud_domain = global.AppConfig?.cloud.domain || 'cloud.sealos.io';
 
   return {
     props: {

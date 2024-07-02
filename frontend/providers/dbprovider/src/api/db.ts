@@ -37,6 +37,7 @@ export const getPodLogs = (data: {
   podName: string;
   stream: boolean;
   logSize?: number;
+  dbType: string;
 }) => POST<string>(`/api/pod/getPodLogs`, data);
 
 export const getPodEvents = (podName: string) =>
@@ -84,3 +85,5 @@ export const getMonitorData = (payload: {
   start: number;
   end: number;
 }) => GET<{ result: MonitorChartDataResult }>(`/api/monitor/getMonitorData`, payload);
+
+export const getOpsRequest = (name: string) => GET(`/api/opsrequest/get?name=${name}`);

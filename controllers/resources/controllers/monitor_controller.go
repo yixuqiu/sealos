@@ -62,20 +62,21 @@ import (
 type MonitorReconciler struct {
 	client.Client
 	logr.Logger
-	Interval                time.Duration
-	Scheme                  *runtime.Scheme
-	stopCh                  chan struct{}
-	wg                      sync.WaitGroup
-	periodicReconcile       time.Duration
-	NvidiaGpu               map[string]gpu.NvidiaGPU
-	DBClient                database.Interface
-	TrafficClient           database.Interface
-	Properties              *resources.PropertyTypeLS
-	PromURL                 string
-	currentObjectMetrics    map[string]objstorage.MetricData
-	ObjStorageClient        *minio.Client
-	ObjStorageMetricsClient *objstorage.MetricsClient
-	ObjectStorageInstance   string
+	Interval                 time.Duration
+	Scheme                   *runtime.Scheme
+	stopCh                   chan struct{}
+	wg                       sync.WaitGroup
+	periodicReconcile        time.Duration
+	NvidiaGpu                map[string]gpu.NvidiaGPU
+	DBClient                 database.Interface
+	TrafficClient            database.Interface
+	Properties               *resources.PropertyTypeLS
+	PromURL                  string
+	currentObjectMetrics     map[string]objstorage.MetricData
+	ObjStorageClient         *minio.Client
+	ObjStorageMetricsClient  *objstorage.MetricsClient
+	ObjStorageUserBackupSize map[string]int64
+	ObjectStorageInstance    string
 }
 
 type quantity struct {
@@ -263,12 +264,16 @@ func (r *MonitorReconciler) processNamespaceList(namespaceList *corev1.Namespace
 }
 
 func (r *MonitorReconciler) preMonitorResourceUsage() error {
-	metrics, err := objstorage.QueryUserUsage(r.ObjStorageMetricsClient)
-	if err != nil {
-		return fmt.Errorf("failed to query object storage metrics: %w", err)
+	if r.ObjStorageMetricsClient != nil {
+		metrics, err := objstorage.QueryUserUsage(r.ObjStorageMetricsClient)
+		if err != nil {
+			return fmt.Errorf("failed to query object storage metrics: %w", err)
+		}
+		r.currentObjectMetrics = metrics
+		logger.Info("success query object storage resource usage", "time", time.Now().Format("2006-01-02 15:04:05"))
 	}
-	r.currentObjectMetrics = metrics
-	logger.Info("success query object storage resource usage", "time", time.Now().Format("2006-01-02 15:04:05"))
+	r.ObjStorageUserBackupSize = objstorage.GetUserBakFileSize(r.ObjStorageClient)
+	fmt.Println("ObjStorageUserBackupSize", r.ObjStorageUserBackupSize)
 	return nil
 }
 
@@ -322,7 +327,10 @@ func (r *MonitorReconciler) monitorResourceUsage(namespace *corev1.Namespace) er
 		return fmt.Errorf("failed to list pvc: %v", err)
 	}
 	for _, pvc := range pvcList.Items {
-		if pvc.Status.Phase != corev1.ClaimBound || pvc.Name == resources.KubeBlocksBackUpName {
+		if pvc.Status.Phase != corev1.ClaimBound {
+			continue
+		}
+		if len(pvc.OwnerReferences) > 0 && pvc.OwnerReferences[0].Kind == "BackupRepo" {
 			continue
 		}
 		pvcRes := resources.NewResourceNamed(&pvc)
@@ -332,13 +340,25 @@ func (r *MonitorReconciler) monitorResourceUsage(namespace *corev1.Namespace) er
 		}
 		resUsed[pvcRes.String()][corev1.ResourceStorage].Add(pvc.Spec.Resources.Requests[corev1.ResourceStorage])
 	}
+	if backupSize := r.ObjStorageUserBackupSize[getBackupObjectStorageName(namespace.Name)]; backupSize > 0 {
+		backupRes := resources.NewObjStorageResourceNamed("DB-BACKUP")
+		if resUsed[backupRes.String()] == nil {
+			resNamed[backupRes.String()] = backupRes
+			resUsed[backupRes.String()] = initResources()
+		}
+		resUsed[backupRes.String()][corev1.ResourceStorage].Add(*resource.NewQuantity(backupSize, resource.BinarySI))
+	}
 	svcList := corev1.ServiceList{}
 	if err := r.List(context.Background(), &svcList, &client.ListOptions{Namespace: namespace.Name}); err != nil {
 		return fmt.Errorf("failed to list svc: %v", err)
 	}
 	for _, svc := range svcList.Items {
-		if svc.Spec.Type != corev1.ServiceTypeNodePort {
+		if svc.Spec.Type != corev1.ServiceTypeNodePort || len(svc.Spec.Ports) == 0 {
 			continue
+		}
+		port := make(map[int32]struct{})
+		for i := range svc.Spec.Ports {
+			port[svc.Spec.Ports[i].NodePort] = struct{}{}
 		}
 		svcRes := resources.NewResourceNamed(&svc)
 		if resUsed[svcRes.String()] == nil {
@@ -346,7 +366,7 @@ func (r *MonitorReconciler) monitorResourceUsage(namespace *corev1.Namespace) er
 			resUsed[svcRes.String()] = initResources()
 		}
 		// nodeport 1:1000, the measurement is quantity 1000
-		resUsed[svcRes.String()][corev1.ResourceServicesNodePorts].Add(*resource.NewQuantity(1000, resource.BinarySI))
+		resUsed[svcRes.String()][corev1.ResourceServicesNodePorts].Add(*resource.NewQuantity(int64(1000*len(port)), resource.BinarySI))
 	}
 
 	var monitors []*resources.Monitor
@@ -370,6 +390,10 @@ func (r *MonitorReconciler) monitorResourceUsage(namespace *corev1.Namespace) er
 		})
 	}
 	return r.DBClient.InsertMonitor(context.Background(), monitors...)
+}
+
+func getBackupObjectStorageName(namespace string) string {
+	return strings.TrimPrefix(namespace, "ns-")
 }
 
 func (r *MonitorReconciler) getResourceUsed(podResource map[corev1.ResourceName]*quantity) (bool, map[uint8]int64) {
