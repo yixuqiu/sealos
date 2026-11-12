@@ -1,18 +1,9 @@
 FROM scratch
+
 USER 65532:65532
 
 COPY registry registry
-COPY manifests manifests
-COPY scripts scripts
+COPY charts charts
+COPY desktop-frontend-entrypoint.sh desktop-frontend-entrypoint.sh
 
-ENV cloudDomain="127.0.0.1.nip.io"
-ENV cloudPort=""
-ENV certSecretName="wildcard-cert"
-ENV passWordEnabled="false"
-ENV githubEnabled="false"
-ENV wechatEnabled="false"
-ENV smsEnabled="false"
-ENV signUpEnabled="true"
-ENV apiEnabled="false"
-
-CMD ["bash scripts/init.sh"]
+CMD ["bash desktop-frontend-entrypoint.sh"]

@@ -1,28 +1,48 @@
+import { Session, sessionKey } from '@/types';
+import { OauthProvider } from '@/types/user';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
-import { Session, sessionKey } from '@/types';
-import { OauthProvider, Provider } from '@/types/user';
+import { nanoid } from 'nanoid';
+import { setSharedAuthCookie } from '@/utils/cookieUtils';
+import { clearWebAnalyticsIdentity } from '@/utils/app-visitor-link';
+import type { WebSessionCredentials } from '@/types/web-session';
+
+export type OauthAction = 'LOGIN' | 'BIND' | 'UNBIND' | 'PROXY';
 
 type SessionState = {
-  session?: Session;
-  token: string;
+  session?: Session; // session.token is app token
+  token: string; // region token (used for API requests)
+  globalToken: string; // global token (used for cross-domain auth cookie)
   provider?: OauthProvider;
-  oauth_state: string;
+  firstUse: Date | null;
+  hasEverLoggedIn: boolean;
   setSession: (ss: Session) => void;
+  setConfiguredSession: (token: string, session: Session) => void;
   setSessionProp: <T extends keyof Session>(key: T, value: Session[T]) => void;
   delSession: () => void;
+  setFirstUse: (d: Date | null) => void;
+  setHasEverLoggedIn: (value: boolean) => void;
   isUserLogin: () => boolean;
-  /*
-      when proxy oauth2.0 ,the domainState need to be used 
-  */
-  generateState: (domainState?: string) => string;
-  compareState: (state: string) => boolean;
+
+  generateState: (action?: OauthAction, domainState?: string) => string;
+  compareState: (state: string) => {
+    action: string;
+    statePayload: string[];
+  };
+  lastSigninProvier?: string;
+  setLastSigninProvider: (provider?: string) => void;
   setProvider: (provider?: OauthProvider) => void;
-  setToken: (token: string) => void;
-  setState: (state: string) => void;
+  setToken: (token: string, rememberMe?: boolean) => void; // Sets region token
+  setGlobalToken: (token: string) => void; // Sets global token and cookie
+  applyRenewedCredentials: (credentials: WebSessionCredentials) => boolean;
   lastWorkSpaceId: string;
   setWorkSpaceId: (id: string) => void;
+  setGuestSession: () => void;
+  isGuest: () => boolean;
+  showGuestLoginModal: boolean;
+  openGuestLoginModal: () => void;
+  closeGuestLoginModal: () => void;
 };
 
 const useSessionStore = create<SessionState>()(
@@ -30,11 +50,37 @@ const useSessionStore = create<SessionState>()(
     immer((set, get) => ({
       session: undefined,
       provider: undefined,
-      oauth_state: '',
-      token: '',
+      lastSigninProvier: undefined,
+      firstUse: null,
+      hasEverLoggedIn: false,
+      token: '', // Region token
+      globalToken: '', // Global token
       lastWorkSpaceId: '',
-      setSession: (ss: Session) => set({ session: ss }),
-      setSessionProp: (key: keyof Session, value: any) => {
+      showGuestLoginModal: false,
+      setFirstUse(d) {
+        set({
+          firstUse: d
+        });
+      },
+      setHasEverLoggedIn(value) {
+        set({
+          hasEverLoggedIn: value
+        });
+      },
+      setLastSigninProvider(provider?: string) {
+        set({ lastSigninProvier: provider });
+      },
+      setSession: (ss: Session) => {
+        if (get().session?.user?.userUid !== ss.user?.userUid) clearWebAnalyticsIdentity();
+        set({ session: ss });
+      },
+      setConfiguredSession: (token, session) => {
+        if (get().session?.user?.userUid !== session.user?.userUid) clearWebAnalyticsIdentity();
+        set({ token, session, hasEverLoggedIn: true });
+      },
+      setSessionProp: <T extends keyof Session>(key: T, value: Session[T]) => {
+        if (key === 'user' && get().session?.user?.userUid !== (value as Session['user'])?.userUid)
+          clearWebAnalyticsIdentity();
         set((state) => {
           if (state.session) {
             state.session[key] = value;
@@ -42,37 +88,96 @@ const useSessionStore = create<SessionState>()(
         });
       },
       delSession: () => {
+        clearWebAnalyticsIdentity();
         set({ session: undefined });
       },
-      isUserLogin: () => !!get().session?.user,
-      generateState: (domainState) => {
-        let state = new Date().getTime().toString();
-        console.log(domainState);
-        if (!!domainState) state = domainState;
-        set({ oauth_state: state });
+      isUserLogin: () => {
+        const state = get();
+        if (state.session?.isGuest) return false;
+        return !!state.session?.user;
+      },
+      // [LOGIN/UNBIND/BIND]_STATE
+      // PROXY_DOMAINSTATE, DOMAINSTATE = URL_[LOGIN/UNBIND/BIND]_STATE
+      generateState: (action = 'LOGIN', domainState) => {
+        let state = action as string;
+        if (domainState && action === 'PROXY') {
+          state = state + '_' + domainState;
+        } else {
+          state = state + '_' + new Date().getTime().toString();
+        }
         return state;
       },
-      setState: (state) => {
-        set({ oauth_state: state });
-      },
       compareState: (state: string) => {
-        let result = state === get().oauth_state;
-        console.log(result, get().oauth_state, state, 'compareState');
-        set({ oauth_state: undefined });
-        return result;
+        const [action, ...statePayload] = state.split('_');
+        return {
+          action,
+          statePayload
+        };
       },
       setProvider: (provider?: OauthProvider) => {
         set({ provider });
       },
-      setToken: (token) => {
+      setToken: (token, rememberMe = false) => {
+        // Sets region token (used for API requests)
         set({ token });
+      },
+      setGlobalToken: (token) => {
+        // Sets global token and immediately updates cookie
+        // Also sets state.token so API requests (getRegionToken, etc.) can use it
+        set({ globalToken: token, token: token });
+        if (typeof window !== 'undefined') {
+          setSharedAuthCookie(token);
+        }
+      },
+      applyRenewedCredentials: (credentials) => {
+        const session = get().session;
+        if (
+          session?.user?.userUid !== credentials.userUid ||
+          session.user.ns_uid !== credentials.workspaceUid
+        )
+          return false;
+        // 一次提交整套凭证，不能先把请求 token 暂时写成 global token。
+        set({
+          globalToken: credentials.globalToken,
+          token: credentials.token,
+          session: { ...session, token: credentials.appToken, kubeconfig: credentials.kubeconfig }
+        });
+        if (typeof window !== 'undefined') setSharedAuthCookie(credentials.globalToken);
+        return true;
       },
       setWorkSpaceId: (id) => {
         set({ lastWorkSpaceId: id });
+      },
+      setGuestSession: () => {
+        clearWebAnalyticsIdentity();
+        const guestId = `guest_${nanoid()}`;
+        set({
+          session: {
+            isGuest: true,
+            guestId,
+            token: '',
+            user: null,
+            kubeconfig: '',
+            subscription: null
+          }
+        });
+      },
+      isGuest: () => get().session?.isGuest || false,
+      openGuestLoginModal: () => {
+        set({ showGuestLoginModal: true });
+      },
+      closeGuestLoginModal: () => {
+        set({ showGuestLoginModal: false });
       }
     })),
     {
-      name: sessionKey
+      name: sessionKey,
+      partialize: (state) => {
+        const { showGuestLoginModal, globalToken, ...rest } = state;
+        // Exclude globalToken and showGuestLoginModal from persistence
+        // globalToken is ephemeral and should only exist in memory + cookie
+        return rest;
+      }
     }
   )
 );

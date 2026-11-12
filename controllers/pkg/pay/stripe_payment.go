@@ -24,14 +24,13 @@ import (
 
 const StripeAPIKEY = "STRIPE_API_KEY"
 
-type StripePayment struct {
-}
+type StripePayment struct{}
 
 func init() {
 	stripe.Key = os.Getenv(StripeAPIKEY)
 }
 
-// const currentcy
+// const currency
 const (
 	USD = "usd"
 	CNY = "cny"
@@ -39,7 +38,10 @@ const (
 
 const sessionExpirationTime = 30 * time.Minute
 
-func CreateCheckoutSession(amount int64, currency, successURL, cancelURL string) (*stripe.CheckoutSession, error) {
+func CreateCheckoutSession(
+	amount int64,
+	currency, successURL, cancelURL string,
+) (*stripe.CheckoutSession, error) {
 	expireAt := time.Now().UTC().Add(sessionExpirationTime).Unix()
 	params := &stripe.CheckoutSessionParams{
 		PaymentMethodTypes: stripe.StringSlice([]string{
@@ -49,18 +51,19 @@ func CreateCheckoutSession(amount int64, currency, successURL, cancelURL string)
 		LineItems: []*stripe.CheckoutSessionLineItemParams{
 			{
 				PriceData: &stripe.CheckoutSessionLineItemPriceDataParams{
-					UnitAmount: stripe.Int64(amount),
-					Currency:   stripe.String(currency),
+					UnitAmount: new(amount),
+					Currency:   new(currency),
 					ProductData: &stripe.CheckoutSessionLineItemPriceDataProductDataParams{
-						Name: stripe.String("Sealos Recharge"),
+						Name: new("Sealos Recharge"),
 					},
 				},
 				Quantity: stripe.Int64(1),
 			},
 		},
-		Mode:       stripe.String(string(stripe.CheckoutSessionModePayment)),
-		SuccessURL: stripe.String(successURL),
-		CancelURL:  stripe.String(cancelURL),
+		Mode:                stripe.String(string(stripe.CheckoutSessionModePayment)),
+		AllowPromotionCodes: new(true),
+		SuccessURL:          new(successURL),
+		CancelURL:           new(cancelURL),
 	}
 
 	s, err := session.New(params)

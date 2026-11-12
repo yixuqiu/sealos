@@ -31,17 +31,6 @@ const docTemplate = `{
                     "Account"
                 ],
                 "summary": "Get user account",
-                "parameters": [
-                    {
-                        "description": "auth request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/helper.Auth"
-                        }
-                    }
-                ],
                 "responses": {
                     "200": {
                         "description": "successfully retrieved user account",
@@ -59,6 +48,304 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "failed to get user account",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/account/v1alpha1/check-permission": {
+            "post": {
+                "description": "Check permission",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Permission"
+                ],
+                "summary": "Check permission",
+                "responses": {
+                    "200": {
+                        "description": "successfully check permission",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "failed to parse check permission request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "authenticate error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "failed to check permission",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/account/v1alpha1/cost-app-list": {
+            "post": {
+                "description": "Get cost app list",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CostAppList"
+                ],
+                "summary": "Get cost app list",
+                "parameters": [
+                    {
+                        "description": "Cost app list request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/helper.GetCostAppListReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "successfully get cost app list",
+                        "schema": {
+                            "$ref": "#/definitions/helper.CostAppListResp"
+                        }
+                    },
+                    "400": {
+                        "description": "failed to parse cost app list request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "authenticate error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "failed to get cost app list",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/account/v1alpha1/cost-app-time-range": {
+            "post": {
+                "description": "Get app cost time range",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "AppCostTimeRange"
+                ],
+                "summary": "Get app cost time range",
+                "parameters": [
+                    {
+                        "description": "App cost time range request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/helper.GetCostAppListReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "successfully get app cost time range",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "failed to parse app cost time range request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "authenticate error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "failed to get app cost time range",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/account/v1alpha1/cost-app-type-list": {
+            "post": {
+                "description": "Get app type list",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "AppTypeList"
+                ],
+                "summary": "Get app type list",
+                "responses": {
+                    "200": {
+                        "description": "successfully get app type list",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "failed to get app type list",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/account/v1alpha1/cost-basic-distribution": {
+            "post": {
+                "description": "Get basic cost distribution",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "BasicCostDistribution"
+                ],
+                "summary": "Get basic cost distribution",
+                "parameters": [
+                    {
+                        "description": "Basic cost distribution request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/helper.GetCostAppListReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "successfully get basic cost distribution",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "failed to parse basic cost distribution request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "authenticate error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "failed to get basic cost distribution",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/account/v1alpha1/cost-overview": {
+            "post": {
+                "description": "Get cost overview",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "CostOverview"
+                ],
+                "summary": "Get cost overview",
+                "parameters": [
+                    {
+                        "description": "Cost overview request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/helper.GetCostAppListReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "successfully get cost overview",
+                        "schema": {
+                            "$ref": "#/definitions/helper.CostOverviewResp"
+                        }
+                    },
+                    "400": {
+                        "description": "failed to parse cost overview request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "authenticate error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "failed to get cost overview",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -87,7 +374,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/helper.UserBaseReq"
+                            "$ref": "#/definitions/helper.ConsumptionRecordReq"
                         }
                     }
                 ],
@@ -123,6 +410,118 @@ const docTemplate = `{
                 }
             }
         },
+        "/account/v1alpha1/costs/all-region-consumption": {
+            "post": {
+                "description": "Get all region consumption amount within a specified time range",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ConsumptionAmount"
+                ],
+                "summary": "Get all region consumption amount",
+                "parameters": [
+                    {
+                        "description": "All region consumption amount request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/helper.ConsumptionRecordReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "successfully retrieved all region consumption amount",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "failed to parse all region consumption amount request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "authenticate error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "failed to get all region consumption amount",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/account/v1alpha1/costs/app": {
+            "post": {
+                "description": "Get app costs within a specified time range",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "AppCosts"
+                ],
+                "summary": "Get app costs",
+                "parameters": [
+                    {
+                        "description": "App costs request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/helper.AppCostsReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "successfully retrieved app costs",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "failed to parse get app cost request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "authenticate error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "failed to get app cost",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/account/v1alpha1/costs/consumption": {
             "post": {
                 "description": "Get user consumption amount within a specified time range",
@@ -143,7 +542,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/helper.UserBaseReq"
+                            "$ref": "#/definitions/helper.ConsumptionRecordReq"
                         }
                     }
                 ],
@@ -199,7 +598,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/helper.UserBaseReq"
+                            "$ref": "#/definitions/helper.GetPaymentReq"
                         }
                     }
                 ],
@@ -255,7 +654,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/helper.UserBaseReq"
+                            "$ref": "#/definitions/helper.UserTimeRangeReq"
                         }
                     }
                 ],
@@ -311,7 +710,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/helper.UserBaseReq"
+                            "$ref": "#/definitions/helper.UserTimeRangeReq"
                         }
                     }
                 ],
@@ -362,12 +761,12 @@ const docTemplate = `{
                 "summary": "Get transfer",
                 "parameters": [
                     {
-                        "description": "auth request",
+                        "description": "Get transfer request",
                         "name": "request",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/helper.Auth"
+                            "$ref": "#/definitions/helper.GetTransferRecordReq"
                         }
                     }
                 ],
@@ -388,6 +787,289 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "failed to get transfer",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/account/v1alpha1/gift-code/use": {
+            "post": {
+                "description": "Redeem a gift code and apply the credit to the user's account",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "UseGiftCode"
+                ],
+                "summary": "Use a gift code",
+                "parameters": [
+                    {
+                        "description": "Use gift code request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/helper.UseGiftCodeReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully redeemed gift code",
+                        "schema": {
+                            "$ref": "#/definitions/helper.UseGiftCodeResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Failed to parse use gift code request",
+                        "schema": {
+                            "$ref": "#/definitions/helper.ErrorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication error",
+                        "schema": {
+                            "$ref": "#/definitions/helper.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to redeem gift code",
+                        "schema": {
+                            "$ref": "#/definitions/helper.ErrorMessage"
+                        }
+                    }
+                }
+            }
+        },
+        "/account/v1alpha1/invoice/apply": {
+            "post": {
+                "description": "Apply invoice",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ApplyInvoice"
+                ],
+                "summary": "Apply invoice",
+                "parameters": [
+                    {
+                        "description": "Apply invoice request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/helper.ApplyInvoiceReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "successfully apply invoice",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "failed to parse apply invoice request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "authenticate error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "no payment can be applied to the invoice",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "failed to apply invoice",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/account/v1alpha1/invoice/get": {
+            "post": {
+                "description": "Get invoice",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "GetInvoice"
+                ],
+                "summary": "Get invoice",
+                "parameters": [
+                    {
+                        "description": "Get invoice request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/helper.GetInvoiceReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "successfully get invoice",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "failed to parse get invoice request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "authenticate error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "failed to get invoice",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/account/v1alpha1/invoice/get-payment": {
+            "post": {
+                "description": "Get invoice payment",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "GetInvoicePayment"
+                ],
+                "summary": "Get invoice payment",
+                "parameters": [
+                    {
+                        "description": "Get invoice payment request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/helper.GetInvoiceReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "successfully get invoice payment",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "failed to parse get invoice payment request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "authenticate error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "failed to get invoice payment",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/account/v1alpha1/invoice/set-status": {
+            "post": {
+                "description": "Set status invoice",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SetStatusInvoice"
+                ],
+                "summary": "Set status invoice",
+                "parameters": [
+                    {
+                        "description": "Set status invoice request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/helper.SetInvoiceStatusReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "successfully set status invoice",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "failed to parse set status invoice request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "authenticate error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "failed to set status invoice",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -550,6 +1232,134 @@ const docTemplate = `{
                 }
             }
         },
+        "/account/v1alpha1/real-name-info": {
+            "post": {
+                "description": "Retrieve the real name information for a user",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "GetUserRealNameInfo"
+                ],
+                "summary": "Get user real name information",
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved user real name info",
+                        "schema": {
+                            "$ref": "#/definitions/helper.GetRealNameInfoResp"
+                        }
+                    },
+                    "400": {
+                        "description": "Failed to parse get real name info request",
+                        "schema": {
+                            "$ref": "#/definitions/helper.ErrorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "Authentication error",
+                        "schema": {
+                            "$ref": "#/definitions/helper.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to get user real name info or info not found/verified",
+                        "schema": {
+                            "$ref": "#/definitions/helper.ErrorMessage"
+                        }
+                    }
+                }
+            }
+        },
+        "/account/v1alpha1/recharge/discount": {
+            "post": {
+                "description": "Get recharge discount",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "RechargeDiscount"
+                ],
+                "summary": "Get recharge discount",
+                "parameters": [
+                    {
+                        "description": "Get recharge discount request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "successfully get recharge discount",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "failed to parse get recharge discount request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "authenticate error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "failed to get recharge discount",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/account/v1alpha1/regions": {
+            "post": {
+                "description": "Get regions",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Regions"
+                ],
+                "summary": "Get regions",
+                "responses": {
+                    "200": {
+                        "description": "successfully get regions",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "failed to get regions",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/account/v1alpha1/transfer": {
             "post": {
                 "description": "Transfer amount",
@@ -605,9 +1415,326 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/account/v1alpha1/user-usage": {
+            "post": {
+                "description": "Get user usage within a specified time range",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "UserUsage"
+                ],
+                "summary": "Get user usage",
+                "parameters": [
+                    {
+                        "description": "User usage request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/helper.UserUsageReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "successfully retrieved user usage",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "failed to parse user usage request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "authenticate error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "failed to get user usage",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/v1alpha1/account": {
+            "get": {
+                "description": "Get user account",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Account"
+                ],
+                "summary": "Get user account",
+                "responses": {
+                    "200": {
+                        "description": "successfully retrieved user account",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "authenticate error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "failed to get user account",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/v1alpha1/notification-recipients": {
+            "post": {
+                "description": "Resolve workspace namespaces to notify-compatible email or phone recipients. Notification methods default to email.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "AdminRead"
+                ],
+                "summary": "List notification recipients for admin",
+                "parameters": [
+                    {
+                        "description": "Notification recipient request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/helper.AdminNotificationRecipientsReq"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "successful notification recipient lookup",
+                        "schema": {
+                            "$ref": "#/definitions/helper.AdminNotificationRecipientsResp"
+                        }
+                    },
+                    "400": {
+                        "description": "invalid notification recipient request",
+                        "schema": {
+                            "$ref": "#/definitions/helper.ErrorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "authentication failed",
+                        "schema": {
+                            "$ref": "#/definitions/helper.ErrorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/helper.ErrorMessage"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/v1alpha1/charge": {
+            "post": {
+                "description": "Charge billing",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Account"
+                ],
+                "summary": "Charge billing",
+                "responses": {
+                    "200": {
+                        "description": "successfully charged billing",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "authenticate error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "failed to charge billing",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/v1alpha1/real-name-info": {
+            "get": {
+                "description": "Get user real name info",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Account"
+                ],
+                "summary": "Get user real name info",
+                "responses": {
+                    "200": {
+                        "description": "successfully retrieved user real name info",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "authenticate error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "failed to get user real name info",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
+        "helper.AdminNotificationContacts": {
+            "type": "object",
+            "properties": {
+                "emails": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "phoneNumbers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "helper.AdminNotificationRecipient": {
+            "type": "object",
+            "properties": {
+                "type": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
+        "helper.AdminNotificationRecipientsReq": {
+            "type": "object",
+            "required": [
+                "namespaces"
+            ],
+            "properties": {
+                "namespaces": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "notificationMethods": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "helper.AdminNotificationRecipientsResp": {
+            "type": "object",
+            "properties": {
+                "recipients": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/helper.AdminNotificationRecipient"
+                    }
+                },
+                "unresolvedNamespaces": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "users": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/helper.AdminNotificationUser"
+                    }
+                },
+                "namespacesWithoutRecipients": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "helper.AdminNotificationUser": {
+            "type": "object",
+            "properties": {
+                "namespace": {
+                    "type": "string"
+                },
+                "notificationContacts": {
+                    "$ref": "#/definitions/helper.AdminNotificationContacts"
+                },
+                "oauthProviders": {
+                    "$ref": "#/definitions/helper.AdminNotificationContacts"
+                },
+                "userUid": {
+                    "type": "string",
+                    "format": "uuid"
+                }
+            }
+        },
         "common.PropertyQuery": {
             "type": "object",
             "properties": {
@@ -629,12 +1756,114 @@ const docTemplate = `{
                 }
             }
         },
-        "helper.Auth": {
+        "helper.AppCostsReq": {
+            "type": "object",
+            "properties": {
+                "appName": {
+                    "description": "@Summary App Name\n@Description App Name",
+                    "type": "string",
+                    "example": "app"
+                },
+                "appType": {
+                    "description": "@Summary App type\n@Description App type",
+                    "type": "string",
+                    "example": "app"
+                },
+                "endTime": {
+                    "type": "string",
+                    "example": "2021-12-01T00:00:00Z"
+                },
+                "kubeConfig": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "description": "@Summary Namespace\n@Description Namespace",
+                    "type": "string",
+                    "example": "ns-admin"
+                },
+                "orderID": {
+                    "description": "@Summary Order ID\n@Description Order ID\n@JSONSchema",
+                    "type": "string",
+                    "example": "order-id-1"
+                },
+                "owner": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "page": {
+                    "description": "@Summary Page\n@Description Page",
+                    "type": "integer",
+                    "example": 1
+                },
+                "pageSize": {
+                    "description": "@Summary Page Size\n@Description Page Size",
+                    "type": "integer",
+                    "example": 10
+                },
+                "startTime": {
+                    "type": "string",
+                    "example": "2021-01-01T00:00:00Z"
+                },
+                "token": {
+                    "type": "string",
+                    "example": "token"
+                },
+                "userID": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "userUID": {
+                    "type": "string",
+                    "example": "user-123"
+                }
+            }
+        },
+        "helper.ApplyInvoiceReq": {
             "type": "object",
             "required": [
-                "kubeConfig",
-                "owner"
+                "detail",
+                "paymentIDList"
             ],
+            "properties": {
+                "detail": {
+                    "description": "invoice detail information json\n@Summary Invoice detail information\n@Description Invoice detail information\n@JSONSchema required",
+                    "type": "string",
+                    "example": "{\"title\":\"title\",\"amount\":100,\"taxRate\":0.06,\"tax\":6,\"total\":106,\"invoiceType\":1,\"invoiceContent\":1,\"invoiceStatus\":1,\"invoiceTime\":\"2021-01-01T00:00:00Z\",\"invoiceNumber\":\"invoice-number-1\",\"invoiceCode\":\"invoice-code-1\",\"invoiceFile\":\"invoice-file-1\"}"
+                },
+                "kubeConfig": {
+                    "type": "string"
+                },
+                "owner": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "paymentIDList": {
+                    "description": "payment id list\n@Summary Payment ID list\n@Description Payment ID list\n@JSONSchema required",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "[\"payment-id-1\"",
+                        "\"payment-id-2\"]"
+                    ]
+                },
+                "token": {
+                    "type": "string",
+                    "example": "token"
+                },
+                "userID": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "userUID": {
+                    "type": "string",
+                    "example": "user-123"
+                }
+            }
+        },
+        "helper.Auth": {
+            "type": "object",
             "properties": {
                 "kubeConfig": {
                     "type": "string"
@@ -642,6 +1871,147 @@ const docTemplate = `{
                 "owner": {
                     "type": "string",
                     "example": "admin"
+                },
+                "token": {
+                    "type": "string",
+                    "example": "token"
+                },
+                "userID": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "userUID": {
+                    "type": "string",
+                    "example": "user-123"
+                }
+            }
+        },
+        "helper.ConsumptionRecordReq": {
+            "type": "object",
+            "properties": {
+                "appName": {
+                    "description": "@Summary App Name\n@Description App Name",
+                    "type": "string",
+                    "example": "app"
+                },
+                "appType": {
+                    "description": "@Summary App type\n@Description App type",
+                    "type": "string",
+                    "example": "app"
+                },
+                "endTime": {
+                    "type": "string",
+                    "example": "2021-12-01T00:00:00Z"
+                },
+                "kubeConfig": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "description": "@Summary Namespace\n@Description Namespace",
+                    "type": "string",
+                    "example": "ns-admin"
+                },
+                "owner": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "startTime": {
+                    "type": "string",
+                    "example": "2021-01-01T00:00:00Z"
+                },
+                "token": {
+                    "type": "string",
+                    "example": "token"
+                },
+                "userID": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "userUID": {
+                    "type": "string",
+                    "example": "user-123"
+                }
+            }
+        },
+        "helper.CostApp": {
+            "type": "object",
+            "properties": {
+                "appName": {
+                    "description": "@Summary App Name\n@Description App Name",
+                    "type": "string"
+                },
+                "appType": {
+                    "description": "@Summary App type\n@Description App type",
+                    "type": "integer"
+                },
+                "namespace": {
+                    "description": "@Summary Namespace\n@Description Namespace",
+                    "type": "string"
+                }
+            }
+        },
+        "helper.CostAppListResp": {
+            "type": "object",
+            "properties": {
+                "apps": {
+                    "description": "@Summary Cost app list\n@Description Cost app list",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/helper.CostApp"
+                    }
+                },
+                "total": {
+                    "description": "@Summary Total\n@Description Total",
+                    "type": "integer"
+                },
+                "totalPage": {
+                    "description": "@Summary Total page\n@Description Total page",
+                    "type": "integer"
+                }
+            }
+        },
+        "helper.CostOverview": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "description": "@Summary Amount\n@Description Amount",
+                    "type": "integer"
+                },
+                "appName": {
+                    "type": "string"
+                },
+                "appType": {
+                    "description": "@Summary App type\n@Description App type",
+                    "type": "integer"
+                },
+                "namespace": {
+                    "description": "@Summary Namespace\n@Description Namespace",
+                    "type": "string"
+                },
+                "regionDomain": {
+                    "description": "@Summary Region domain\n@Description Region domain",
+                    "type": "string",
+                    "example": "region-domain-1"
+                }
+            }
+        },
+        "helper.CostOverviewResp": {
+            "type": "object",
+            "properties": {
+                "overviews": {
+                    "description": "@Summary Cost overview\n@Description Cost overview",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/helper.CostOverview"
+                    }
+                },
+                "total": {
+                    "description": "@Summary Total\n@Description Total",
+                    "type": "integer"
+                },
+                "totalPage": {
+                    "description": "@Summary Total page\n@Description Total page",
+                    "type": "integer"
                 }
             }
         },
@@ -651,6 +2021,153 @@ const docTemplate = `{
                 "error": {
                     "type": "string",
                     "example": "authentication failure"
+                }
+            }
+        },
+        "helper.GetCostAppListReq": {
+            "type": "object",
+            "properties": {
+                "appName": {
+                    "description": "@Summary App Name\n@Description App Name",
+                    "type": "string"
+                },
+                "appType": {
+                    "description": "@Summary App type\n@Description App type",
+                    "type": "string"
+                },
+                "endTime": {
+                    "type": "string",
+                    "example": "2021-12-01T00:00:00Z"
+                },
+                "kubeConfig": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "description": "@Summary Namespace\n@Description Namespace",
+                    "type": "string"
+                },
+                "owner": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "page": {
+                    "description": "@Summary Page\n@Description Page",
+                    "type": "integer"
+                },
+                "pageSize": {
+                    "description": "@Summary Page Size\n@Description Page Size",
+                    "type": "integer"
+                },
+                "startTime": {
+                    "type": "string",
+                    "example": "2021-01-01T00:00:00Z"
+                },
+                "token": {
+                    "type": "string",
+                    "example": "token"
+                },
+                "userID": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "userUID": {
+                    "type": "string",
+                    "example": "user-123"
+                }
+            }
+        },
+        "helper.GetInvoiceReq": {
+            "type": "object",
+            "properties": {
+                "endTime": {
+                    "type": "string",
+                    "example": "2021-12-01T00:00:00Z"
+                },
+                "invoiceID": {
+                    "description": "@Summary Invoice ID\n@Description Invoice ID\n@JSONSchema",
+                    "type": "string",
+                    "example": "invoice-id-1"
+                },
+                "kubeConfig": {
+                    "type": "string"
+                },
+                "owner": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "page": {
+                    "description": "@Summary Page\n@Description Page",
+                    "type": "integer"
+                },
+                "pageSize": {
+                    "description": "@Summary Page Size\n@Description Page Size",
+                    "type": "integer"
+                },
+                "startTime": {
+                    "type": "string",
+                    "example": "2021-01-01T00:00:00Z"
+                },
+                "token": {
+                    "type": "string",
+                    "example": "token"
+                },
+                "userID": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "userUID": {
+                    "type": "string",
+                    "example": "user-123"
+                }
+            }
+        },
+        "helper.GetPaymentReq": {
+            "type": "object",
+            "properties": {
+                "endTime": {
+                    "type": "string",
+                    "example": "2021-12-01T00:00:00Z"
+                },
+                "invoiced": {
+                    "description": "@Summary Invoiced\n@Description Invoiced\n@JSONSchema",
+                    "type": "boolean",
+                    "example": true
+                },
+                "kubeConfig": {
+                    "type": "string"
+                },
+                "owner": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "page": {
+                    "description": "@Summary Page\n@Description Page",
+                    "type": "integer"
+                },
+                "pageSize": {
+                    "description": "@Summary Page Size\n@Description Page Size",
+                    "type": "integer"
+                },
+                "paymentID": {
+                    "description": "@Summary Payment ID\n@Description Payment ID\n@JSONSchema",
+                    "type": "string",
+                    "example": "payment-id-1"
+                },
+                "startTime": {
+                    "type": "string",
+                    "example": "2021-01-01T00:00:00Z"
+                },
+                "token": {
+                    "type": "string",
+                    "example": "token"
+                },
+                "userID": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "userUID": {
+                    "type": "string",
+                    "example": "user-123"
                 }
             }
         },
@@ -677,12 +2194,85 @@ const docTemplate = `{
                 }
             }
         },
+        "helper.GetRealNameInfoResp": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/helper.GetRealNameInfoRespData"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Successfully retrieved real name information"
+                }
+            }
+        },
+        "helper.GetRealNameInfoRespData": {
+            "type": "object",
+            "properties": {
+                "isRealName": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "userID": {
+                    "type": "string",
+                    "example": "user-123"
+                }
+            }
+        },
+        "helper.GetTransferRecordReq": {
+            "type": "object",
+            "properties": {
+                "endTime": {
+                    "type": "string",
+                    "example": "2021-12-01T00:00:00Z"
+                },
+                "kubeConfig": {
+                    "type": "string"
+                },
+                "owner": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "page": {
+                    "description": "@Summary Page\n@Description Page",
+                    "type": "integer",
+                    "example": 1
+                },
+                "pageSize": {
+                    "description": "@Summary Page Size\n@Description Page Size",
+                    "type": "integer",
+                    "example": 10
+                },
+                "startTime": {
+                    "type": "string",
+                    "example": "2021-01-01T00:00:00Z"
+                },
+                "token": {
+                    "type": "string",
+                    "example": "token"
+                },
+                "transferID": {
+                    "description": "@Summary Transfer ID\n@Description Transfer ID",
+                    "type": "string",
+                    "example": "transfer-id-1"
+                },
+                "type": {
+                    "description": "0: all, 1: in, 2: out\n@Summary Type of the request\n@Description Type of the request: 0: all, 1: transfer in, 2: transfer out",
+                    "type": "integer",
+                    "example": 0
+                },
+                "userID": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "userUID": {
+                    "type": "string",
+                    "example": "user-123"
+                }
+            }
+        },
         "helper.NamespaceBillingHistoryReq": {
             "type": "object",
-            "required": [
-                "kubeConfig",
-                "owner"
-            ],
             "properties": {
                 "endTime": {
                     "type": "string",
@@ -699,9 +2289,21 @@ const docTemplate = `{
                     "type": "string",
                     "example": "2021-01-01T00:00:00Z"
                 },
+                "token": {
+                    "type": "string",
+                    "example": "token"
+                },
                 "type": {
                     "description": "@Summary Type of the request (optional)\n@Description Type of the request (optional)\n@JSONSchema",
                     "type": "integer"
+                },
+                "userID": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "userUID": {
+                    "type": "string",
+                    "example": "user-123"
                 }
             }
         },
@@ -720,11 +2322,53 @@ const docTemplate = `{
                 }
             }
         },
+        "helper.SetInvoiceStatusReq": {
+            "type": "object",
+            "required": [
+                "invoiceIDList",
+                "status"
+            ],
+            "properties": {
+                "invoiceIDList": {
+                    "description": "Invoice id list\n@Summary Invoice ID list\n@Description Invoice ID list\n@JSONSchema required",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "[\"invoice-id-1\"",
+                        "\"invoice-id-2\"]"
+                    ]
+                },
+                "kubeConfig": {
+                    "type": "string"
+                },
+                "owner": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "status": {
+                    "description": "Invoice status\n@Summary Invoice status\n@Description Invoice status\n@JSONSchema required",
+                    "type": "string",
+                    "example": "COMPLETED,REJECTED,PENDING"
+                },
+                "token": {
+                    "type": "string",
+                    "example": "token"
+                },
+                "userID": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "userUID": {
+                    "type": "string",
+                    "example": "user-123"
+                }
+            }
+        },
         "helper.SetPaymentInvoiceReq": {
             "type": "object",
             "required": [
-                "kubeConfig",
-                "owner",
                 "paymentIDList"
             ],
             "properties": {
@@ -745,15 +2389,24 @@ const docTemplate = `{
                         "[\"payment-id-1\"",
                         "\"payment-id-2\"]"
                     ]
+                },
+                "token": {
+                    "type": "string",
+                    "example": "token"
+                },
+                "userID": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "userUID": {
+                    "type": "string",
+                    "example": "user-123"
                 }
             }
         },
         "helper.TransferAmountReq": {
             "type": "object",
             "required": [
-                "amount",
-                "kubeConfig",
-                "owner",
                 "toUser"
             ],
             "properties": {
@@ -773,15 +2426,80 @@ const docTemplate = `{
                     "description": "@Summary To user\n@Description To user\n@JSONSchema required",
                     "type": "string",
                     "example": "admin"
+                },
+                "token": {
+                    "type": "string",
+                    "example": "token"
+                },
+                "transferAll": {
+                    "description": "@Summary Transfer all\n@Description Transfer all amount",
+                    "type": "boolean"
+                },
+                "userID": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "userUID": {
+                    "type": "string",
+                    "example": "user-123"
                 }
             }
         },
-        "helper.UserBaseReq": {
+        "helper.UseGiftCodeReq": {
             "type": "object",
             "required": [
-                "kubeConfig",
-                "owner"
+                "code"
             ],
+            "properties": {
+                "code": {
+                    "description": "@Summary Gift code to be used\n@Description The code of the gift card to be redeemed\n@JSONSchema required",
+                    "type": "string",
+                    "example": "HAPPY2024"
+                },
+                "kubeConfig": {
+                    "type": "string"
+                },
+                "owner": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "token": {
+                    "type": "string",
+                    "example": "token"
+                },
+                "userID": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "userUID": {
+                    "type": "string",
+                    "example": "user-123"
+                }
+            }
+        },
+        "helper.UseGiftCodeResp": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/helper.UseGiftCodeRespData"
+                },
+                "message": {
+                    "type": "string",
+                    "example": "Gift code successfully redeemed"
+                }
+            }
+        },
+        "helper.UseGiftCodeRespData": {
+            "type": "object",
+            "properties": {
+                "userID": {
+                    "type": "string",
+                    "example": "user-123"
+                }
+            }
+        },
+        "helper.UserTimeRangeReq": {
+            "type": "object",
             "properties": {
                 "endTime": {
                     "type": "string",
@@ -797,6 +2515,61 @@ const docTemplate = `{
                 "startTime": {
                     "type": "string",
                     "example": "2021-01-01T00:00:00Z"
+                },
+                "token": {
+                    "type": "string",
+                    "example": "token"
+                },
+                "userID": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "userUID": {
+                    "type": "string",
+                    "example": "user-123"
+                }
+            }
+        },
+        "helper.UserUsageReq": {
+            "type": "object",
+            "properties": {
+                "endTime": {
+                    "type": "string",
+                    "example": "2021-12-01T00:00:00Z"
+                },
+                "kubeConfig": {
+                    "type": "string"
+                },
+                "namespaceList": {
+                    "description": "NamespaceList\n@Summary Namespace list\n@Description Namespace list\n@JSONSchema",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "[\"ns-admin\"",
+                        "\"ns-test1\"]"
+                    ]
+                },
+                "owner": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "startTime": {
+                    "type": "string",
+                    "example": "2021-01-01T00:00:00Z"
+                },
+                "token": {
+                    "type": "string",
+                    "example": "token"
+                },
+                "userID": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "userUID": {
+                    "type": "string",
+                    "example": "user-123"
                 }
             }
         }

@@ -6,6 +6,9 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { getGlobalToken } from '@/services/backend/globalAuth';
 import { ProviderType } from 'prisma/global/generated/client';
 import { getRegionToken } from '@/services/backend/regionAuth';
+import { webRegistrationFromRequest } from '@/services/backend/activity/registration';
+import { issueWebSession } from '@/services/backend/web-session';
+import { codeOrigin } from '@/services/backend/oauth2/authorization-code';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -40,18 +43,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const _data = await getGlobalToken({
       provider: ProviderType.WECHAT,
-      id: userInfo.openid,
+      providerId: userInfo.openid,
       avatar_url,
-      name: userInfo?.nickname
+      name: userInfo?.nickname,
+      // Official-account signups likewise read invite context from cookies;
+      // server-side validation failures never block registration
+      registration: webRegistrationFromRequest(req)
     });
+
+    if (_data?.isRestricted) {
+      return jsonRes(res, {
+        code: 401,
+        message: 'Account banned'
+      });
+    }
+
     if (!_data)
       return jsonRes(res, {
         code: 401,
         message: 'Unauthorized'
       });
+
+    if (
+      _data.user?.userUid &&
+      (req.headers.origin === codeOrigin() || req.headers['sec-fetch-site'] === 'same-origin')
+    )
+      await issueWebSession(res, _data.user.userUid);
+
     const data = await getRegionToken({
-      userUid: _data.user.userUid,
-      userId: _data.user.name
+      userUid: _data.user!.userUid,
+      userId: _data.user!.name
     });
     return jsonRes(res, {
       code: 200,

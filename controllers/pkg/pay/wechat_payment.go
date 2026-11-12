@@ -17,6 +17,8 @@ package pay
 import (
 	"context"
 	"crypto/rand"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -29,8 +31,7 @@ import (
 	"github.com/wechatpay-apiv3/wechatpay-go/utils"
 )
 
-type WechatPayment struct {
-}
+type WechatPayment struct{}
 
 // ENV keys
 const (
@@ -55,9 +56,17 @@ func NewClient(ctx context.Context, opts ...core.ClientOption) (*core.Client, er
 	mchPrivateKey, err := utils.LoadPrivateKey(os.Getenv(WechatPrivateKey))
 	if err != nil {
 		log.Print("private key is: ", os.Getenv(WechatPrivateKey))
-		return nil, fmt.Errorf("load merchant private key error: %v", err)
+		return nil, fmt.Errorf("load merchant private key error: %w", err)
 	}
-	opts = append(opts, option.WithWechatPayAutoAuthCipher(mchID, mchCertificateSerialNumber, mchPrivateKey, mchAPIv3Key))
+	opts = append(
+		opts,
+		option.WithWechatPayAutoAuthCipher(
+			mchID,
+			mchCertificateSerialNumber,
+			mchPrivateKey,
+			mchAPIv3Key,
+		),
+	)
 	return core.NewClient(ctx, opts...)
 }
 
@@ -65,17 +74,17 @@ func QueryOrder(orderID string) (*payments.Transaction, error) {
 	ctx := context.Background()
 	client, err := NewClient(context.Background())
 	if err != nil {
-		return nil, fmt.Errorf("new wechat pay client err:%s", err)
+		return nil, fmt.Errorf("new wechat pay client err:%w", err)
 	}
 	svc := native.NativeApiService{Client: client}
 	resp, _, err := svc.QueryOrderByOutTradeNo(ctx,
 		native.QueryOrderByOutTradeNoRequest{
-			Mchid:      core.String(os.Getenv(MchID)),
-			OutTradeNo: core.String(orderID),
+			Mchid:      new(os.Getenv(MchID)),
+			OutTradeNo: new(orderID),
 		},
 	)
 	if err != nil {
-		return nil, fmt.Errorf("call QueryOrder err:%s", err)
+		return nil, fmt.Errorf("call QueryOrder err:%w", err)
 	}
 	return resp, nil
 }
@@ -85,14 +94,14 @@ func WechatPay(amount int64, user, tradeNO, describe, callback string) (string, 
 	ctx := context.Background()
 	client, err := NewClient(context.Background())
 	if err != nil {
-		return "", fmt.Errorf("new wechat pay client err:%s", err)
+		return "", fmt.Errorf("new wechat pay client err:%w", err)
 	}
 
 	if tradeNO == "" {
 		tradeNO = GetRandomString(32)
 	}
 	if tradeNO == "" {
-		return "", fmt.Errorf("generate tradeNO failed")
+		return "", errors.New("generate tradeNO failed")
 	}
 	if describe == "" {
 		describe = "sealos cloud recharge"
@@ -103,38 +112,38 @@ func WechatPay(amount int64, user, tradeNO, describe, callback string) (string, 
 	svc := native.NativeApiService{Client: client}
 	resp, _, err := svc.Prepay(ctx,
 		native.PrepayRequest{
-			Appid:         core.String(os.Getenv(AppID)),
-			Mchid:         core.String(os.Getenv(MchID)),
-			Description:   core.String(describe),
-			OutTradeNo:    core.String(tradeNO),
-			TimeExpire:    core.Time(time.Now()),
-			Attach:        core.String(user),
-			NotifyUrl:     core.String(callback),
-			GoodsTag:      core.String("sealos recharge"),
-			SupportFapiao: core.Bool(false),
+			Appid:         new(os.Getenv(AppID)),
+			Mchid:         new(os.Getenv(MchID)),
+			Description:   new(describe),
+			OutTradeNo:    new(tradeNO),
+			TimeExpire:    new(time.Now()),
+			Attach:        new(user),
+			NotifyUrl:     new(callback),
+			GoodsTag:      new("sealos recharge"),
+			SupportFapiao: new(false),
 			Amount: &native.Amount{
-				Currency: core.String("CNY"),
-				Total:    core.Int64(amount),
+				Currency: new("CNY"),
+				Total:    new(amount),
 			},
 			Detail: &native.Detail{
 				CostPrice: core.Int64(608800),
 				GoodsDetail: []native.GoodsDetail{
 					{
-						GoodsName:        core.String("sealos cloud recharge"),
-						MerchantGoodsId:  core.String("ABC"),
+						GoodsName:        new("sealos cloud recharge"),
+						MerchantGoodsId:  new("ABC"),
 						Quantity:         core.Int64(1),
 						UnitPrice:        core.Int64(828800),
-						WechatpayGoodsId: core.String("1001"),
-					}},
+						WechatpayGoodsId: new("1001"),
+					},
+				},
 			},
 			SettleInfo: &native.SettleInfo{
-				ProfitSharing: core.Bool(false),
+				ProfitSharing: new(false),
 			},
 		},
 	)
-
 	if err != nil {
-		return "", fmt.Errorf("call Prepay err:%s", err)
+		return "", fmt.Errorf("call Prepay err:%w", err)
 	}
 	return *resp.CodeUrl, nil
 }
@@ -144,5 +153,5 @@ func GetRandomString(n int) string {
 	if _, err := rand.Read(randBytes); err != nil {
 		return ""
 	}
-	return fmt.Sprintf("%x", randBytes)
+	return hex.EncodeToString(randBytes)
 }

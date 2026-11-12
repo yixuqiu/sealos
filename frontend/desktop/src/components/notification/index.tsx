@@ -1,126 +1,125 @@
-import Iconfont from '@/components/iconfont';
 import request from '@/services/request';
 import useAppStore from '@/stores/app';
-import { formatTime } from '@/utils/tools';
-import { Box, Button, Flex, Text, UseDisclosureReturn } from '@chakra-ui/react';
-import { ClearOutlineIcon, CloseIcon, WarnIcon } from '@sealos/ui';
+import {
+  Box,
+  Button,
+  Center,
+  Flex,
+  Image,
+  Popover,
+  PopoverBody,
+  PopoverContent,
+  PopoverTrigger,
+  Portal,
+  Text,
+  UseDisclosureReturn
+} from '@chakra-ui/react';
+import { NotificationIcon, WarnIcon, useMessage } from '@sealos/ui';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import clsx from 'clsx';
 import { produce } from 'immer';
 import { useTranslation } from 'next-i18next';
-import { useEffect, useState } from 'react';
-import styles from './index.module.scss';
-import { NotificationItem } from '@/types';
+import { useEffect, useRef, useState } from 'react';
+import styles from './index.module.css';
+import { TNotification } from '@/types';
+import { listNotification } from '@/api/platform';
+import { TriangleAlert, X } from 'lucide-react';
 
-type TNotification = {
+import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+import 'dayjs/locale/zh-cn';
+dayjs.extend(relativeTime);
+dayjs.locale('en');
+
+type NotificationProps = {
   disclosure: UseDisclosureReturn;
   onAmount: (amount: number) => void;
+  children: React.ReactNode;
 };
 
-export default function Notification(props: TNotification) {
+export default function Notification(props: NotificationProps) {
   const { t, i18n } = useTranslation();
   const { disclosure, onAmount } = props;
-  const { installedApps, openApp } = useAppStore();
-  const [readNotes, setReadNotes] = useState<NotificationItem[]>([]);
-  const [unReadNotes, setUnReadNotes] = useState<NotificationItem[]>([]);
+  const { openDesktopApp } = useAppStore();
+  const [notifications, setNotifications] = useState<TNotification[]>([]);
+  const { message } = useMessage();
+  const isForbiddenRef = useRef(false);
 
   const [MessageConfig, setMessageConfig] = useState<{
-    activeTab: 'read' | 'unread';
-    activePage: 'index' | 'detail';
-    msgDetail?: NotificationItem;
-    popupMessage?: NotificationItem;
+    popupMessage?: TNotification;
   }>({
-    activeTab: 'unread',
-    activePage: 'index',
-    msgDetail: undefined,
     popupMessage: undefined
   });
 
-  const { refetch } = useQuery(['getNotifications'], () => request('/api/notification/list'), {
+  const { refetch } = useQuery(['getNotifications'], () => listNotification(), {
     onSuccess: (data) => {
-      const messages = data?.data?.items as NotificationItem[];
-      if (messages) {
-        handleNotificationData(messages);
+      if (data.data) {
+        handleNotificationData(data.data);
       }
     },
-    refetchInterval: 5 * 60 * 1000
+    refetchInterval: 5 * 60 * 1000,
+    staleTime: 5 * 60 * 1000
   });
 
-  const handleNotificationData = (data: NotificationItem[]) => {
-    const parseIsRead = (item: NotificationItem) =>
-      JSON.parse(item?.metadata?.labels?.isRead || 'false');
+  const compareByTimestamp = (a: TNotification, b: TNotification) => b?.timestamp - a?.timestamp;
 
-    const unReadMessage = data.filter((item) => !parseIsRead(item));
-    const readMessage = data.filter(parseIsRead);
+  const handleNotificationData = (data: TNotification[]) => {
+    const sortedMessages = data.sort(compareByTimestamp);
+    const unReadCount = data.filter((item) => !item.isRead).length;
 
-    const compareByTimestamp = (a: NotificationItem, b: NotificationItem) =>
-      b?.spec?.timestamp - a?.spec?.timestamp;
-
-    unReadMessage.sort(compareByTimestamp);
-    readMessage.sort(compareByTimestamp);
-
-    if (unReadMessage?.[0]?.spec?.desktopPopup) {
+    if (
+      sortedMessages?.[0]?.desktopPopup &&
+      !isForbiddenRef.current &&
+      !sortedMessages?.[0]?.isRead
+    ) {
       setMessageConfig(
         produce((draft) => {
-          draft.popupMessage = unReadMessage[0];
+          draft.popupMessage = sortedMessages[0];
         })
       );
     }
 
-    onAmount(unReadMessage?.length || 0);
-    setReadNotes(readMessage);
-    setUnReadNotes(unReadMessage);
+    onAmount(unReadCount);
+    setNotifications(sortedMessages);
   };
-
-  const notifications = MessageConfig.activeTab === 'unread' ? unReadNotes : readNotes;
 
   const readMsgMutation = useMutation({
-    mutationFn: (name: string[]) => request.post('/api/notification/read', { name }),
-    onSettled: () => refetch()
+    mutationFn: (name: string[]) =>
+      request.post<{ code: number; reason: string }>('/api/notification/read', { name }),
+    onSettled: () => refetch(),
+    onSuccess: (data) => {
+      if (data.data.code === 403) {
+        isForbiddenRef.current = true;
+        message({
+          status: 'warning',
+          title: data.data.reason
+        });
+        setMessageConfig(
+          produce((draft) => {
+            draft.popupMessage = undefined;
+          })
+        );
+      }
+    }
   });
 
-  const goMsgDetail = (item: NotificationItem) => {
-    if (MessageConfig.activeTab === 'unread') {
-      readMsgMutation.mutate([item?.metadata?.name]);
+  const handleReadMessage = (item: TNotification) => {
+    if (!item.isRead) {
+      readMsgMutation.mutate([item?.name]);
     }
-    setMessageConfig(
-      produce((draft) => {
-        draft.activePage = 'detail';
-        draft.msgDetail = item;
-        draft.popupMessage = undefined;
-      })
-    );
-  };
-
-  const markAllAsRead = () => {
-    const names = unReadNotes?.map((item: NotificationItem) => item?.metadata?.name);
-    readMsgMutation.mutate(names);
-    setMessageConfig(
-      produce((draft) => {
-        draft.popupMessage = undefined;
-      })
-    );
   };
 
   const handleCharge = () => {
-    const costCenter = installedApps.find((i) => i.key === 'system-costcenter');
-    if (!costCenter) return;
-    openApp(costCenter, {
+    openDesktopApp({
+      appKey: 'system-account-center',
       query: {
-        openRecharge: 'true'
-      }
+        page: 'plan'
+      },
+      messageData: {
+        page: 'plan'
+      },
+      pathname: '/redirect'
     });
-  };
-
-  const resetMessageState = () => {
-    setMessageConfig(
-      produce((draft) => {
-        draft.activeTab = 'unread';
-        draft.activePage = 'index';
-        draft.msgDetail = undefined;
-      })
-    );
-    disclosure.onClose();
   };
 
   useEffect(() => {
@@ -129,277 +128,264 @@ export default function Notification(props: TNotification) {
     }
   }, [i18n.language, refetch]);
 
-  return disclosure.isOpen ? (
-    <>
-      <Box className={styles.bg} onClick={resetMessageState} cursor={'auto'}></Box>
-      <Box className={clsx(styles.container)}>
-        <Flex
-          className={clsx(styles.title)}
-          h={'32px'}
-          alignItems={'center'}
-          justifyContent={'center'}
-          position="relative"
-        >
-          <Box
-            className={clsx(styles.back_btn)}
-            onClick={() =>
-              setMessageConfig(
-                produce((draft) => {
-                  draft.activePage = 'index';
-                })
-              )
-            }
-            data-active={MessageConfig.activePage}
-          >
-            <Iconfont iconName="icon-left" color="#239BF2" width={32} height={32} />
-          </Box>
-          <Text>
-            {MessageConfig.activePage === 'index'
-              ? t('Message Center')
-              : i18n.language === 'zh' && MessageConfig.msgDetail?.spec?.i18ns?.zh?.title
-              ? MessageConfig.msgDetail?.spec?.i18ns?.zh?.title
-              : MessageConfig.msgDetail?.spec?.title}
-          </Text>
-        </Flex>
-        {MessageConfig.activePage === 'index' ? (
-          <>
-            <Flex alignItems={'center'}>
-              <Box
-                className={clsx(MessageConfig.activeTab === 'unread' && styles.active, styles.tab)}
-                onClick={() =>
-                  setMessageConfig(
-                    produce((draft) => {
-                      draft.activeTab = 'unread';
-                    })
-                  )
-                }
-              >
-                {t('Unread')} ({unReadNotes?.length || 0})
-              </Box>
-              <Box
-                ml={'12px'}
-                className={clsx(MessageConfig.activeTab === 'read' && styles.active, styles.tab)}
-                onClick={() =>
-                  setMessageConfig(
-                    produce((draft) => {
-                      draft.activeTab = 'read';
-                    })
-                  )
-                }
-              >
-                {t('Have Read')}
-              </Box>
-              <Button
-                ml={'auto'}
-                onClick={() => markAllAsRead()}
-                variant={'white-bg-icon'}
-                leftIcon={<ClearOutlineIcon color={'grayModern.600'} />}
-                iconSpacing="4px"
-              >
-                <Text color={'#434F61'} className={styles.tab}>
-                  {t('Read All')}
-                </Text>
-              </Button>
-            </Flex>
-            <Flex pt={'9px'} pb="12px" direction={'column'} h="430px" className={styles.scrollWrap}>
-              {notifications?.map((item: NotificationItem) => {
-                return (
-                  <Flex
-                    mt={'8px'}
-                    direction={'column'}
-                    className={clsx(styles.message)}
-                    key={item?.metadata?.uid}
-                    onClick={() => goMsgDetail(item)}
-                  >
-                    <Text className={styles.title}>
-                      {i18n.language === 'zh' && item.spec?.i18ns?.zh?.title
-                        ? item.spec?.i18ns?.zh?.title
-                        : item?.spec?.title}
-                    </Text>
-                    <Text flexShrink={0} mt="4px" noOfLines={1} className={clsx(styles.desc)}>
-                      {i18n.language === 'zh' && item.spec?.i18ns?.zh?.message
-                        ? item.spec?.i18ns?.zh?.message
-                        : item?.spec?.message}
-                    </Text>
-                    <Flex
-                      mt="4px"
-                      justifyContent={'space-between'}
-                      className={clsx(styles.desc, styles.footer)}
+  const getNotificationIcon = (from: string | undefined) => {
+    switch (from) {
+      case 'Debt-System':
+        return <WarnIcon />;
+      case 'Active-System':
+        return '🎉';
+      default:
+        return <NotificationIcon color={'brightBlue.300'} />;
+    }
+  };
+
+  const getNotificationIconColor = (from: string | undefined) => {
+    switch (from) {
+      case 'Debt-System':
+        return '#DC2626';
+      case 'Active-System':
+        return '#F97316';
+      default:
+        return '#F97316';
+    }
+  };
+
+  const markAllAsRead = () => {
+    const names = notifications?.map((item: TNotification) => item?.name);
+    readMsgMutation.mutate(names);
+    setMessageConfig(
+      produce((draft) => {
+        draft.popupMessage = undefined;
+      })
+    );
+    refetch();
+  };
+
+  const [expandedMessageId, setExpandedMessageId] = useState<string | null>(null);
+
+  const toggleExpand = (uid: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExpandedMessageId(expandedMessageId === uid ? null : uid);
+  };
+
+  return (
+    <Box>
+      <Popover
+        isOpen={disclosure.isOpen}
+        onClose={disclosure.onClose}
+        placement="bottom-end"
+        isLazy
+      >
+        <PopoverTrigger>{props.children}</PopoverTrigger>
+
+        <Portal>
+          <PopoverContent w="360px" maxW="100vw">
+            <PopoverBody p="0">
+              <Box className={clsx(styles.container)}>
+                <Flex
+                  h={'44px'}
+                  alignItems={'center'}
+                  position="relative"
+                  pl={'20px'}
+                  pr={'16px'}
+                  borderBottom={'1px solid #F4F4F5'}
+                >
+                  <Text>{t('common:notification_alert')}</Text>
+                  <Flex alignItems={'center'} gap={'12px'} ml={'auto'} cursor={'pointer'}>
+                    <Text
+                      color={'#1C4EF5'}
+                      fontSize={'12px'}
+                      fontWeight={500}
+                      onClick={markAllAsRead}
                     >
-                      <Text>
-                        {t('From')}「
-                        {i18n.language === 'zh' && item.spec?.i18ns?.zh?.from
-                          ? item.spec?.i18ns?.zh?.from
-                          : item?.spec?.from}
-                        」
+                      {t('common:read_all')}
+                    </Text>
+                    <X
+                      cursor={'pointer'}
+                      size={16}
+                      color="#737373"
+                      onClick={() => disclosure.onClose()}
+                      style={{ marginLeft: 'auto' }}
+                    />
+                  </Flex>
+                </Flex>
+
+                <Flex direction={'column'} h="430px" className={styles.scrollWrap}>
+                  {notifications?.length > 0 ? (
+                    notifications?.map((item: TNotification) => (
+                      <Flex
+                        cursor={'pointer'}
+                        key={item?.uid}
+                        onClick={() => handleReadMessage(item)}
+                        position="relative"
+                        borderBottom={'1px solid #f4f4f5'}
+                        p={'12px 20px'}
+                        gap={'12px'}
+                      >
+                        <Center
+                          flexShrink={0}
+                          width="32px"
+                          height="32px"
+                          borderRadius="full"
+                          border="1px solid #F4F4F5"
+                          position={'relative'}
+                        >
+                          <TriangleAlert
+                            size={20}
+                            color={getNotificationIconColor(item?.i18n['en']?.from)}
+                          />
+
+                          {!item.isRead && (
+                            <Box
+                              position="absolute"
+                              top="0px"
+                              right="0px"
+                              w="6px"
+                              h="6px"
+                              borderRadius="50%"
+                              bg="red.500"
+                            />
+                          )}
+                        </Center>
+                        <Box>
+                          <Text fontSize={'14px'} fontWeight={500} color={'#000000'}>
+                            {item.i18n[i18n.language]?.title}
+                          </Text>
+                          <Text
+                            height={expandedMessageId === item.uid ? 'auto' : '32px'}
+                            mt={'2px'}
+                            whiteSpace="pre-wrap"
+                            fontSize={'12px'}
+                            color={'#737373'}
+                            noOfLines={expandedMessageId === item.uid ? undefined : 2}
+                            overflow={'hidden'}
+                            textOverflow={'ellipsis'}
+                            onClick={(e) => toggleExpand(item.uid, e)}
+                            cursor="pointer"
+                            position="relative"
+                          >
+                            {item.i18n[i18n.language]?.message}
+                          </Text>
+                          <Text mt="8px" fontSize={'14px'} fontWeight={400} color={'#18181B'}>
+                            {dayjs((item?.timestamp || 0) * 1000).fromNow()}
+                          </Text>
+                        </Box>
+                      </Flex>
+                    ))
+                  ) : (
+                    <Flex
+                      h="100%"
+                      color={'#737373'}
+                      width={'220px'}
+                      flexDirection={'column'}
+                      justifyContent={'center'}
+                      alignItems={'center'}
+                      mx={'auto'}
+                    >
+                      <Image src="/images/no-notification.svg" alt="no-notification" />
+                      <Text mt={'20px'} fontSize={'16px'} fontWeight={500} color={'#18181B'}>
+                        {t('common:no_notifications_yet')}
                       </Text>
-                      <Text>
-                        {formatTime((item?.spec?.timestamp || 0) * 1000, 'YYYY-MM-DD HH:mm')}
+                      <Text color={'#71717A'} mt={'4px'} fontSize={'14px'}>
+                        {t('common:no_notifications_desc')}
                       </Text>
                     </Flex>
-                  </Flex>
-                );
-              })}
-            </Flex>
-          </>
-        ) : (
-          <Box
-            h="430px"
-            w="100%"
-            mt="16px"
-            p="16px"
-            borderRadius={'12px'}
-            backgroundColor="rgba(255, 255, 255, 0.9)"
-          >
-            <Flex
-              className={clsx(styles.desc, styles.footer)}
-              color="#717D8A"
-              fontSize="10px"
-              fontWeight="400"
-            >
-              <Text>
-                {t('From')}「
-                {i18n.language === 'zh' && MessageConfig.msgDetail?.spec?.i18ns?.zh?.from
-                  ? MessageConfig.msgDetail?.spec?.i18ns?.zh?.from
-                  : MessageConfig.msgDetail?.spec?.from}
-                」
-              </Text>
-              <Box display={'inline-block'} ml={'auto'}>
-                {formatTime(
-                  (MessageConfig.msgDetail?.spec?.timestamp || 0) * 1000,
-                  'YYYY-MM-DD HH:mm'
-                )}
+                  )}
+                </Flex>
               </Box>
-            </Flex>
-            <Text
-              whiteSpace="pre-wrap"
-              mt="14px"
-              fontSize="12px"
-              fontWeight={400}
-              color="#000000"
-              h="300px"
-              overflowY="auto"
-            >
-              {i18n.language === 'zh' && MessageConfig.msgDetail?.spec?.i18ns?.zh?.message
-                ? MessageConfig.msgDetail?.spec?.i18ns?.zh?.message
-                : MessageConfig.msgDetail?.spec?.message}
-            </Text>
-            {MessageConfig.msgDetail?.spec?.from === 'Debt-System' && (
-              <Flex justifyContent={'center'} mt="26px">
-                <Button
-                  w="159px"
-                  h="32px"
-                  bg="#24282C"
-                  borderRadius={'4px'}
-                  color={'#FFF'}
-                  fontSize={'12px'}
-                  variant={'primary'}
-                  onClick={() => {
-                    resetMessageState();
-                    handleCharge();
-                  }}
-                >
-                  {t('Charge')}
-                </Button>
-              </Flex>
-            )}
-          </Box>
-        )}
-      </Box>
-    </>
-  ) : (
-    <>
-      {MessageConfig?.popupMessage && (
-        <Box
-          cursor={'default'}
-          position={'absolute'}
-          w="320px"
-          h={'170px'}
-          top={'48px'}
-          right={'0px'}
-          bg="rgba(255, 255, 255, 0.80)"
-          backdropFilter={'blur(50px)'}
-          boxShadow={'0px 15px 20px 0px rgba(0, 0, 0, 0.10)'}
-          borderRadius={'12px 0px 12px 12px'}
-          p="20px"
-        >
-          <Flex alignItems={'center'}>
-            <WarnIcon />
-            <Text fontSize={'16px'} fontWeight={600} color={'#24282C'} ml="10px">
-              {i18n.language === 'zh' && MessageConfig.popupMessage?.spec?.i18ns?.zh?.title
-                ? MessageConfig.popupMessage?.spec?.i18ns?.zh?.title
-                : MessageConfig.popupMessage?.spec?.title}
-            </Text>
-            <CloseIcon
-              ml="auto"
-              cursor={'pointer'}
-              onClick={() => {
-                setMessageConfig(
-                  produce((draft) => {
-                    draft.popupMessage = undefined;
-                  })
-                );
-              }}
-            />
-          </Flex>
-          <Text
-            whiteSpace="pre-wrap"
-            mt="14px"
-            fontSize="12px"
-            fontWeight={400}
-            color="#000000"
-            className="overflow-auto"
-            noOfLines={2}
-            height={'36px'}
-          >
-            {i18n.language === 'zh' && MessageConfig.popupMessage?.spec?.i18ns?.zh?.message
-              ? MessageConfig.popupMessage?.spec?.i18ns?.zh?.message
-              : MessageConfig.popupMessage?.spec?.message}
-          </Text>
+            </PopoverBody>
+          </PopoverContent>
+        </Portal>
+      </Popover>
 
-          <Flex alignItems={'center'} justifyContent={'end'} mt="18px" gap="8px">
-            <Button
-              w="78px"
-              h="32px"
-              bg="#F8FAFB"
-              borderRadius={'4px'}
-              _hover={{ bg: '#F8FAFB' }}
-              onClick={() => {
-                const temp = MessageConfig.popupMessage;
-                readMsgMutation.mutate([temp?.metadata?.name || '']);
-                disclosure.onOpen();
-                setMessageConfig(
-                  produce((draft) => {
-                    draft.activePage = 'detail';
-                    draft.msgDetail = temp;
-                    draft.popupMessage = undefined;
-                  })
-                );
-              }}
+      <Popover
+        isOpen={!!MessageConfig.popupMessage && !disclosure.isOpen}
+        closeOnBlur={false}
+        placement="bottom-end"
+        isLazy
+      >
+        <PopoverTrigger>
+          {/* Helps locating the popover */}
+          <Box visibility={'hidden'}></Box>
+        </PopoverTrigger>
+
+        <Portal>
+          <PopoverContent w="396px" maxW="100vw">
+            <PopoverBody
+              bg="#FFF"
+              boxShadow={'0px 4px 12px 0px rgba(0, 0, 0, 0.08)'}
+              borderRadius={'12px'}
+              p="24px"
+              zIndex={9}
             >
-              {t('Detail')}
-            </Button>
-            <Button
-              w="78px"
-              h="32px"
-              variant={'primary'}
-              borderRadius={'4px'}
-              onClick={() => {
-                const temp = MessageConfig.popupMessage;
-                readMsgMutation.mutate([temp?.metadata?.name || '']);
-                setMessageConfig(
-                  produce((draft) => {
-                    draft.popupMessage = undefined;
-                  })
-                );
-                handleCharge();
-              }}
-            >
-              {t('Charge')}
-            </Button>
-          </Flex>
-        </Box>
-      )}
-    </>
+              <Flex alignItems={'center'} position={'relative'}>
+                <TriangleAlert
+                  size={20}
+                  color={getNotificationIconColor(MessageConfig.popupMessage?.i18n['en']?.from)}
+                />
+
+                <Text fontSize={'16px'} fontWeight={600} ml="6px">
+                  {MessageConfig.popupMessage?.i18n[i18n.language]?.title}
+                </Text>
+                <X
+                  size={20}
+                  color="#18181B"
+                  style={{
+                    position: 'absolute',
+                    right: '0px',
+                    top: '0px',
+                    color: '#18181B'
+                  }}
+                  cursor={'pointer'}
+                  onClick={() => {
+                    const temp = MessageConfig.popupMessage;
+                    setMessageConfig(
+                      produce((draft) => {
+                        draft.popupMessage = undefined;
+                      })
+                    );
+                    readMsgMutation.mutate([temp?.name || '']);
+                  }}
+                />
+              </Flex>
+
+              <Text
+                whiteSpace="pre-wrap"
+                mt="8px"
+                fontSize={'14px'}
+                fontWeight={400}
+                color={'#18181B'}
+              >
+                {MessageConfig.popupMessage?.i18n[i18n.language]?.message}
+              </Text>
+
+              <Flex alignItems={'center'} mt="16px">
+                {MessageConfig.popupMessage?.i18n['en']?.from === 'Debt-System' && (
+                  <Button
+                    w="92px"
+                    h="32px"
+                    variant={'solid'}
+                    color={'#FAFAFA'}
+                    borderRadius={'8px'}
+                    onClick={() => {
+                      const temp = MessageConfig.popupMessage;
+                      setMessageConfig(
+                        produce((draft) => {
+                          draft.popupMessage = undefined;
+                        })
+                      );
+                      readMsgMutation.mutate([temp?.name || '']);
+                      handleCharge();
+                    }}
+                  >
+                    {t('common:charge')}
+                  </Button>
+                )}
+              </Flex>
+            </PopoverBody>
+          </PopoverContent>
+        </Portal>
+      </Popover>
+    </Box>
   );
 }

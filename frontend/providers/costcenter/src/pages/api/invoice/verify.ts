@@ -1,10 +1,15 @@
-import { NextApiRequest, NextApiResponse } from 'next';
-import { jsonRes } from '@/service/backend/response';
+import { Config } from '@/config';
 import { checkCode } from '@/service/backend/db/verifyCode';
-import { addInvoice } from '@/service/backend/db/invoice';
-import { ReqGenInvoice } from '@/types';
-import { authSession } from '@/service/backend/auth';
-import { sendToBot } from '@/service/sendToBot';
+import { makeAPIClientByHeader } from '@/service/backend/region';
+import { jsonRes } from '@/service/backend/response';
+import {
+  getInvoicePayments,
+  sendToBot,
+  sendToUpdateBot,
+  sendToWithdrawBot,
+  updateTenantAccessToken
+} from '@/service/sendToBot';
+import { InvoicePayload, RechargeBillingItem, ReqGenInvoice } from '@/types';
 import {
   isValidBANKAccount,
   isValidCNTaxNumber,
@@ -12,31 +17,18 @@ import {
   isValidPhoneNumber,
   retrySerially
 } from '@/utils/tools';
-import { enableInvoice } from '@/service/enabled';
+import { NextApiRequest, NextApiResponse } from 'next';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    if (!enableInvoice()) {
+    if (!Config().costCenter.invoice.enabled) {
       throw new Error('invoice is not enabled');
     }
-    const kc = await authSession(req.headers);
-
-    // get user account payment amount
-    const user = kc.getCurrentUser();
-    if (user === null) {
-      return jsonRes(res, { code: 401, message: 'user null' });
-    }
-
+    await updateTenantAccessToken();
     const { detail, contract, billings } = req.body as ReqGenInvoice;
-    if (
-      !detail ||
-      !contract ||
-      !billings ||
-      !isValidPhoneNumber(contract.phone) ||
-      !isValidCNTaxNumber(detail.tax) ||
-      !isValidBANKAccount(detail.bankAccount) ||
-      !isValidEmail(contract.email)
-    ) {
+
+    // Check basic required fields
+    if (!detail || !contract || !billings) {
       return jsonRes(res, {
         data: {
           status: false
@@ -45,16 +37,44 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         code: 400
       });
     }
-    const url = process.env.BILLING_URI + '/account/v1alpha1/payment/set-invoice';
-    const setInvoiceRes = await fetch(url, {
-      method: 'POST',
-      body: JSON.stringify({
-        kubeConfig: kc.exportConfig(),
-        owner: user.name,
-        paymentIDList: billings.map((b) => b.ID)
-      })
-    });
-    if (!setInvoiceRes.ok) throw Error('setInvocice error');
+
+    // Validate contact information (required for all types)
+    if (!isValidPhoneNumber(contract.phone) || !isValidEmail(contract.email)) {
+      return jsonRes(res, {
+        data: {
+          status: false
+        },
+        message: 'The content is invalid',
+        code: 400
+      });
+    }
+
+    // Validate invoice details based on invoice type
+    const isPersonal = detail.type === 'personal';
+    if (isPersonal) {
+      // Personal type: tax and bankAccount are optional, no validation needed
+      // Only validate that required fields exist
+      if (!detail.title) {
+        return jsonRes(res, {
+          data: {
+            status: false
+          },
+          message: 'The content is invalid',
+          code: 400
+        });
+      }
+    } else {
+      // Normal/Special type: validate tax and bankAccount
+      if (!isValidCNTaxNumber(detail.tax) || !isValidBANKAccount(detail.bankAccount)) {
+        return jsonRes(res, {
+          data: {
+            status: false
+          },
+          message: 'The content is invalid',
+          code: 400
+        });
+      }
+    }
     if (
       process.env.NODE_ENV !== 'development' &&
       !(await checkCode({ phone: contract.phone, code: contract.code }))
@@ -76,39 +96,75 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         code: 400
       });
     }
-    const document = {
-      k8s_user: user.name,
+    const invoiceDetail: {
+      detail: ReqGenInvoice['detail'];
+      contract: Omit<ReqGenInvoice['contract'], 'code'>;
+    } = {
       detail,
-      contract,
-      billings: billings.map((item) => ({
-        order_id: item.ID,
-        amount: item.Amount,
-        regionUID: item.RegionUID,
-        userUID: item.UserUID,
-        createdTime: new Date(item.CreatedAt)
-      }))
+      contract: {
+        person: contract.person,
+        phone: contract.phone,
+        email: contract.email
+      }
+    };
+    const bodyRaw = {
+      // kubeConfig: kc.exportConfig(),
+      paymentIDList: billings.map((b) => b.order_id),
+      detail: JSON.stringify(invoiceDetail)
+    };
+    const message_id = (await retrySerially<string>(
+      () =>
+        sendToBot({
+          invoiceDetail,
+          payments: billings
+        }),
+      3
+    )) as string;
+    if (!message_id) {
+      console.log('sendMessage Error');
+      throw Error('');
+    }
+    const client = await makeAPIClientByHeader(req, res);
+    if (!client) return;
+
+    const result = await client.post('/account/v1alpha1/invoice/apply', bodyRaw);
+    const invoiceRes = result.data as {
+      data: {
+        invoice: InvoicePayload;
+        payments: RechargeBillingItem[];
+      };
     };
 
-    const result = await addInvoice(document);
-    if (!result.acknowledged) {
-      return jsonRes(res, {
-        data: {
-          status: false
-        },
-        message: 'update data error',
-        code: 500
-      });
-    }
-    await retrySerially(async () => {
-      try {
-        const result = await sendToBot(document);
-        if (result.StatusCode !== 0) {
-          throw new Error(result.msg);
-        }
-      } catch (error) {
-        console.error(error);
+    if (result.status !== 200) {
+      console.log(invoiceRes);
+      await sendToWithdrawBot({ message_id });
+      if (result.status === 403)
+        return jsonRes(res, {
+          message: 'You have no permission to apply for the invoice.',
+          data: {
+            status: false
+          },
+          code: 403
+        });
+      else if (result.status === 500) {
+        throw new Error('Failed to apply for the invoice.');
       }
-    }, 3);
+    }
+
+    const invoice = invoiceRes.data.invoice;
+    const payments = await getInvoicePayments(invoice.id);
+    const paymentItems = payments.map((payment) => ({
+      order_id: payment.ID,
+      amount: payment.Amount,
+      regionUID: payment.RegionUID,
+      createdTime: payment.CreatedAt
+    }));
+    const botResult = await sendToUpdateBot({
+      invoice,
+      payments: paymentItems,
+      message_id
+    });
+    if (!botResult) throw Error('botResult is null');
 
     return jsonRes(res, {
       data: {
@@ -119,7 +175,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   } catch (error) {
     console.log(error);
-    jsonRes(res, {
+    return jsonRes(res, {
       data: {
         status: false
       },

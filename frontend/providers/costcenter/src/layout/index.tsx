@@ -2,11 +2,12 @@ import useSessionStore from '@/stores/session';
 import { Box, Flex, Link, Text } from '@chakra-ui/react';
 import { useEffect, useState } from 'react';
 import { createSealosApp, sealosApp } from 'sealos-desktop-sdk/app';
-import styles from './index.module.scss';
 import SideBar from './sidebar';
+import useBillingStore from '@/stores/billing';
 
 export default function Layout({ children }: any) {
   const { setSession } = useSessionStore();
+  const { setNamespace, namespaceList } = useBillingStore();
   const [isLodaing, setIsLoading] = useState(true);
   const [isError, setIsError] = useState(false);
 
@@ -20,6 +21,9 @@ export default function Layout({ children }: any) {
         const result = await sealosApp.getSession();
         setSession(result);
         setIsLoading(false);
+
+        // Selected region will be automatically populated (current region will always be the first one). We don't need to set manually here.
+        setNamespace(namespaceList.findIndex((item) => item[0] === result.user.nsid) ?? 0);
       } catch (error) {
         if (process.env.NODE_ENV === 'development') {
           setIsLoading(false);
@@ -28,19 +32,18 @@ export default function Layout({ children }: any) {
       }
     };
     initApp();
-  }, [isLodaing, setSession]);
+  }, [isLodaing, setSession, namespaceList, setNamespace]);
 
   return (
     <Flex
       w="100vw"
-      h="100vh"
       position="relative"
-      background="frostyNightfall.200"
       pt={'4px'}
       pb="10px"
-      backdropFilter="blur(150px)"
+      px={'2.5rem'}
       alignItems={'center'}
       justifyContent={'center'}
+      className="bg-background"
     >
       {isLodaing ? (
         <Flex w={'100%'} h={'100%'} alignItems={'center'} justifyContent={'center'}>
@@ -56,9 +59,20 @@ export default function Layout({ children }: any) {
           )}
         </Flex>
       ) : (
-        <Flex width="full" height="full" maxWidth="1600px" justify={'center'}>
-          <SideBar />
-          <Box flexGrow={1} borderRadius="8px" overflow={'hidden'} w={0}>
+        <Flex
+          position={'relative'}
+          width="full"
+          height={'auto'}
+          maxWidth="1600px"
+          minHeight={'100vh'}
+          justify={'center'}
+          alignItems={'start'}
+          gap={'1.5rem'}
+        >
+          <div className="pt-10 min-w-[12rem] sticky top-0">
+            <SideBar />
+          </div>
+          <Box flexGrow={1} borderRadius="8px" overflow={'hidden'} w={0} className="pt-10">
             {children}
           </Box>
         </Flex>

@@ -44,6 +44,7 @@ help: ## Display this help.
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+	cp -r config/crd/bases/* deploy/charts/license-controller/crds/
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -58,20 +59,20 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test ./... -coverprofile cover.out
+test: ## Run tests.
+	@LD_FLAGS=""; \
+	[ -n "$(LICENSE_KEY)" ] && LD_FLAGS="-X ${CONTROLLER_PKG}.encryptionKey=${LICENSE_KEY}"; \
+	go test -race -ldflags "$${LD_FLAGS}" ./... -count=1
 
 
 ##@ Build
 
 .PHONY: build
-CONTROLLER_PKG=github.com/labring/sealos/controllers/pkg
-CONTROLLER_LICENSE=github.com/labring/sealos/controllers/license/internal
-build: manifests generate fmt vet ## Build manager binary.
-	LD_FLAGS=""; \
-	[ -n "$(CRYPTOKEY)" ] && LD_FLAGS+="-X ${CONTROLLER_PKG}/crypto.encryptionKey=${CRYPTOKEY} -X ${CONTROLLER_PKG}/database.cryptoKey=${CRYPTOKEY}"; \
-	[ -n "$(LICENSE_KEY)" ] && LD_FLAGS+=" -X ${CONTROLLER_LICENSE}/util/key.EncryptionKey=${LICENSE_KEY}"; \
-	CGO_ENABLED=0 GOOS=linux  go build -ldflags "$${LD_FLAGS}" -o bin/manager cmd/manager/main.go
+CONTROLLER_PKG=github.com/labring/sealos/controllers/pkg/license
+build:
+	LD_FLAGS="-s -w"; \
+	[ -n "$(LICENSE_KEY)" ] && LD_FLAGS+=" -X ${CONTROLLER_PKG}.encryptionKey=${LICENSE_KEY}"; \
+	CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -ldflags "$${LD_FLAGS}" -trimpath -o bin/manager cmd/manager/main.go
 
 
 .PHONY: run
@@ -82,7 +83,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 # (i.e. docker build --platform linux/arm64 ). However, you must enable docker buildKit for it.
 # More info: https://docs.docker.com/develop/develop-images/build_enhancements/
 .PHONY: docker-build
-docker-build: ## Build docker image with the manager.
+docker-build: build## Build docker image with the manager.
 	mv bin/manager bin/controller-license-${TARGETARCH} || true
 	chmod +x bin/controller-license-${TARGETARCH}
 	docker build -t ${IMG} . --build-arg TARGETARCH=${TARGETARCH}
@@ -150,7 +151,7 @@ ENVTEST ?= $(LOCALBIN)/setup-envtest
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v4.2.0
-CONTROLLER_TOOLS_VERSION ?= v0.8.0
+CONTROLLER_TOOLS_VERSION ?= v0.14.0
 
 KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize

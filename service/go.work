@@ -1,14 +1,18 @@
-go 1.20
+go 1.26.0
 
 use (
-	./database
-	./pay
-	./account
-	./launchpad
 	.
+	./account
+	./vlogs
 )
 
 replace (
 	github.com/labring/sealos/controllers/account => ../controllers/account
 	github.com/labring/sealos/controllers/user => ../controllers/user
+
+	k8s.io/api => k8s.io/api v0.36.6
+	k8s.io/apiextensions-apiserver => k8s.io/apiextensions-apiserver v0.36.6
+	k8s.io/apimachinery => k8s.io/apimachinery v0.36.6
+	k8s.io/client-go => k8s.io/client-go v0.36.6
+	sigs.k8s.io/controller-runtime => sigs.k8s.io/controller-runtime v0.24.1
 )

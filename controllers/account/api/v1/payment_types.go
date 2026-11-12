@@ -17,7 +17,7 @@ limitations under the License.
 package v1
 
 import (
-	"fmt"
+	"strconv"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -45,6 +45,8 @@ type PaymentSpec struct {
 
 	// UserID is the user id who want to recharge
 	UserID string `json:"userID,omitempty"`
+	// UserCr is the user cr name who want to recharge
+	UserCR string `json:"userCR,omitempty"`
 	// Amount is the amount of recharge
 	Amount int64 `json:"amount,omitempty"`
 	// e.g. wechat, alipay, creditcard, etc.
@@ -78,8 +80,8 @@ type Payment struct {
 
 // PaymentList contains a list of Payment
 type PaymentList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
+	metav1.TypeMeta `          json:",inline"`
+	metav1.ListMeta `          json:"metadata,omitempty"`
 	Items           []Payment `json:"items"`
 }
 
@@ -87,7 +89,7 @@ func (p *Payment) ToJSON() string {
 	return `{
 	"spec": {
 		"userID": "` + p.Spec.UserID + `",
-		"amount": ` + fmt.Sprint(p.Spec.Amount) + `,
+		"amount": ` + strconv.FormatInt(p.Spec.Amount, 10) + `,
 		"paymentMethod": "` + p.Spec.PaymentMethod + `"
 	},
 	"status": {
@@ -96,8 +98,4 @@ func (p *Payment) ToJSON() string {
 		"status": "` + p.Status.Status + `"
 	}
 }`
-}
-
-func init() {
-	SchemeBuilder.Register(&Payment{}, &PaymentList{})
 }

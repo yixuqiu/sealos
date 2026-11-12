@@ -15,53 +15,46 @@
 package controller
 
 import (
-	"fmt"
-	"strings"
-
-	claimsutil "github.com/labring/sealos/controllers/license/internal/util/claims"
-	licenseutil "github.com/labring/sealos/controllers/license/internal/util/license"
-	count "github.com/labring/sealos/controllers/pkg/account"
-	database2 "github.com/labring/sealos/controllers/pkg/database"
-	types2 "github.com/labring/sealos/controllers/pkg/types"
-	"github.com/labring/sealos/controllers/pkg/utils/logger"
+	"context"
+	"time"
 
 	licensev1 "github.com/labring/sealos/controllers/license/api/v1"
+	licenseutil "github.com/labring/sealos/controllers/license/internal/util/license"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type LicenseActivator struct {
-	accountDB database2.AccountV2
+	client.Client
 }
 
-func (l *LicenseActivator) Active(license *licensev1.License) error {
-	// TODO mv to active function
-	switch license.Spec.Type {
-	case licensev1.AccountLicenseType:
-		if err := l.Recharge(license); err != nil {
-			return fmt.Errorf("recharge account failed: %w", err)
+func (r *LicenseActivator) updateStatus(
+	ctx context.Context,
+	nn types.NamespacedName,
+	status *licensev1.LicenseStatus,
+) error {
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		original := &licensev1.License{}
+		if err := r.Get(ctx, nn, original); err != nil {
+			return err
 		}
-	case licensev1.ClusterLicenseType:
-		// TODO implement cluster license
-	}
-	return nil
+		original.Status = *status
+		return r.Client.Status().Update(ctx, original)
+	})
 }
 
-func (l *LicenseActivator) Recharge(license *licensev1.License) error {
-	claims, err := licenseutil.GetClaims(license)
+func (r *LicenseActivator) Active(ctx context.Context, license *licensev1.License) error {
+	exp, err := licenseutil.GetLicenseExpireTime(license)
 	if err != nil {
 		return err
 	}
+	updateStatus := &license.Status
+	updateStatus.Phase = licensev1.LicenseStatusPhaseActive
+	updateStatus.Reason = "License activated successfully"
+	updateStatus.ExpirationTime = metav1.NewTime(exp)
+	updateStatus.ActivationTime = metav1.NewTime(time.Now())
 
-	var data = &claimsutil.AccountClaimData{}
-	if err := claims.Data.SwitchToAccountData(data); err != nil {
-		return err
-	}
-	owner := GetNameByNameSpace(license.Namespace)
-
-	logger.Info("recharge account", "crName", owner, "amount", data.Amount)
-
-	return l.accountDB.AddBalance(&types2.UserQueryOpts{Owner: owner}, data.Amount*count.CurrencyUnit)
-}
-
-func GetNameByNameSpace(ns string) string {
-	return strings.TrimPrefix(ns, "ns-")
+	return r.updateStatus(ctx, client.ObjectKeyFromObject(license), updateStatus)
 }

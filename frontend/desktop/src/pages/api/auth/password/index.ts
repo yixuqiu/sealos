@@ -3,13 +3,15 @@ import { jsonRes } from '@/services/backend/response';
 import { strongPassword } from '@/utils/crypto';
 import { enablePassword } from '@/services/enable';
 import { getGlobalToken } from '@/services/backend/globalAuth';
+import { AuthError } from '@/services/backend/errors';
+import { webRegistrationFromRequest } from '@/services/backend/activity/registration';
 import { ProviderType } from 'prisma/global/generated/client';
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     if (!enablePassword()) {
       throw new Error('PASSWORD_SALT is not defined');
     }
-    const { user: name, password, inviterId } = req.body;
+    const { user: name, password, semData, adClickData } = req.body;
     if (!strongPassword(password)) {
       return jsonRes(res, {
         message:
@@ -19,12 +21,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     const data = await getGlobalToken({
       provider: ProviderType.PASSWORD,
-      id: name,
+      providerId: name,
       avatar_url: '',
       password,
       name,
-      inviterId
+      semData,
+      adClickData,
+      // Web password signups read invite context from cookies; server-side
+      // validation failures never block registration
+      registration: webRegistrationFromRequest(req)
     });
+
+    if (data?.isRestricted) {
+      return jsonRes(res, {
+        code: 401,
+        message: 'Account banned'
+      });
+    }
+
     if (!data)
       return jsonRes(res, {
         code: 401,
@@ -32,15 +46,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     return jsonRes(res, {
       data: {
-        token: data.token
+        token: data.token,
+        needInit: data.needInit
       },
       code: 200,
       message: 'Successfully'
     });
   } catch (err) {
     console.log(err);
+    let message = 'Failed to authorize with password';
+
+    if (err instanceof AuthError) {
+      message = err.message;
+    } else if (err instanceof Error) {
+      message = err.message;
+    }
+
     return jsonRes(res, {
-      message: 'Failed to authorize with password',
+      message,
       code: 500
     });
   }

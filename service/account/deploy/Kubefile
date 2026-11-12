@@ -1,8 +1,9 @@
 FROM scratch
+COPY charts charts
 COPY registry registry
-COPY manifests manifests
+COPY account-service-entrypoint.sh account-service-entrypoint.sh
 
-ENV DEFAULT_NAMESPACE account-system
-ENV MONGO_URI mongodb://mongo:27017
+ENV RELEASE_NAMESPACE=account-system
+ENV RELEASE_NAME=account-service
 
-CMD ["kubectl apply -f manifests/deploy.yaml -n $DEFAULT_NAMESPACE"]
+CMD ["bash account-service-entrypoint.sh"]

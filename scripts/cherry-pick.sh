@@ -3,6 +3,8 @@
 set -e
 
 REPO_NAME=$(jq -r ".repository.full_name" "$GITHUB_EVENT_PATH")
+PR_NUMBER=${1:-}
+TARGET_BRANCH=${2:-}
 
 onerror() {
 	gh pr comment $PR_NUMBER --body "🤖 says: ‼️ cherry pick action failed.<br/>See: https://github.com/$REPO_NAME/actions/runs/$GITHUB_RUN_ID"
@@ -11,22 +13,16 @@ onerror() {
 trap onerror ERR
 
 if [ -z "$PR_NUMBER" ]; then
-	PR_NUMBER=$(jq -r ".pull_request.number" "$GITHUB_EVENT_PATH")
-	if [[ "$PR_NUMBER" == "null" ]]; then
-		PR_NUMBER=$(jq -r ".issue.number" "$GITHUB_EVENT_PATH")
-	fi
-	if [[ "$PR_NUMBER" == "null" ]]; then
-		echo "Failed to determine PR Number."
-		exit 1
-	fi
+	echo "Usage: $0 <pr-number> [target-branch]"
+  exit 1
+fi
+
+if [[ -z "$GITHUB_TOKEN" ]]; then
+  echo "Usage: $0 <pr-number> [target-branch]"
+  exit 1
 fi
 
 echo "Collecting information about PR #$PR_NUMBER of $GITHUB_REPOSITORY..."
-
-if [[ -z "$GITHUB_TOKEN" ]]; then
-	echo "Set the GITHUB_TOKEN env variable."
-	exit 1
-fi
 
 URI=https://api.github.com
 
@@ -52,14 +48,6 @@ done
 if [[ "$MERGED" != "true" ]] ; then
 	echo "PR is not merged! Can't cherry pick it."
 	gh pr comment $PR_NUMBER --body "🤖 says: ‼️ PR can't be cherry-picked, please merge it first."
-	exit 1
-fi
-
-TARGET_BRANCH=$(jq -r ".comment.body" "$GITHUB_EVENT_PATH" | awk '{ print $2 }'  | tr -d '[:space:]')
-
-if [[ -z "$TARGET_BRANCH" ]]; then
-	echo "Cannot get target branch information for PR #$PR_NUMBER!"
-	gh pr comment $PR_NUMBER --body "🤖 says: ‼️ Cannot get target branch information."
 	exit 1
 fi
 

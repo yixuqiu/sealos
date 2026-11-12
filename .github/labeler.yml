@@ -1,96 +1,87 @@
 #Usage in github: https://github.com/actions/labeler
 
 area/command:
-  - any: [ 'cmd/**/*' ]
+- any: [ 'lifecycle/cmd/**/*' ]
 
 kind/documentation:
-  - any: [ 'docs/**/*' ]
+- any: [ 'docs/**/*' ]
 
 area/qa:
-  - 'QA.md'
+- 'QA.md'
 
 area/test:
-  - '**/*_test.go'
-  - 'test/**/*'
+- '**/*_test.go'
+- 'lifecycle/test/**/*'
 
 area/buildah:
-  - any: [ 'pkg/buildah/**/*' ]
+- any: [ 'lifecycle/pkg/buildah/**/*' ]
 
 area/imageCRIShim:
-  - any: [ 'staging/src/github.com/labring/image-cri-shim/**/*' ]
+- any: [ 'lifecycle/staging/src/github.com/labring/image-cri-shim/**/*' ]
 
 area/lvscare:
-  - any: [ 'staging/src/github.com/labring/lvscare/**/*' ]
+- any: [ 'lifecycle/staging/src/github.com/labring/lvscare/**/*' ]
 
 area/bootstrap:
-  - any: [ 'pkg/bootstrap/**/*' ]
+- any: [ 'lifecycle/pkg/bootstrap/**/*' ]
 
 area/clusterfile:
-  - any: [ 'pkg/clusterfile/**/*' ]
+- any: [ 'lifecycle/pkg/clusterfile/**/*' ]
 
 area/config:
-  - any: [ 'pkg/config/**/*' ]
-  - any: [ 'pkg/env/**/*' ]
-  - any: [ 'pkg/template/**/*' ]
+- any: [ 'lifecycle/pkg/config/**/*' ]
+- any: [ 'lifecycle/pkg/env/**/*' ]
+- any: [ 'lifecycle/pkg/template/**/*' ]
 
 area/guest:
-  - any: [ 'pkg/guest/**/*' ]
+- any: [ 'lifecycle/pkg/guest/**/*' ]
 
 area/env:
-  - any: [ 'pkg/system/**/*' ]
+- any: [ 'lifecycle/pkg/system/**/*' ]
 
 area/filesystem:
-  - any: [ 'pkg/filesystem/**/*' ]
-
-area/build:
-  - any: [ 'pkg/buildimage/**/*' ]
+- any: [ 'lifecycle/pkg/filesystem/**/*' ]
 
 area/apply:
-  - any: [ 'pkg/apply/**/*' ]
+- any: [ 'lifecycle/pkg/apply/**/*' ]
 
 area/check:
-  - any: [ 'pkg/checker/**/*' ]
+- any: [ 'lifecycle/pkg/checker/**/*' ]
 
 area/ipvs:
-  - any: [ 'pkg/ipvs/**/*' ]
+- any: [ 'lifecycle/pkg/ipvs/**/*' ]
 
 area/ssh:
-  - any: [ 'pkg/ssh/**/*' ]
-  - any: [ 'pkg/remote/**/*' ]
+- any: [ 'lifecycle/pkg/ssh/**/*' ]
 
 area/registry:
-  - any: [ 'pkg/registry/**/*' ]
+- any: [ 'lifecycle/pkg/registry/**/*' ]
 
 area/runtime:
-  - any: [ 'pkg/runtime/**/*' ]
+- any: [ 'lifecycle/pkg/runtime/**/*' ]
 
 area/api:
-  - any: [ 'pkg/types/**/*']
-  - any: [ '**/*_types.go' ]
+- any: [ 'lifecycle/pkg/types/**/*' ]
+- any: [ 'lifecycle/**/*_types.go' ]
 
 area/cloud:
-  - any: [ 'controllers/**/*' ]
-  - any: [ 'service/**/*' ]
-  - any: ['docs/4.0/docs/**', '!docs/4.0/docs/lifecycle-management/**']
-  - any: ['docs/4.0/i18n/zh-Hans/**', '!docs/4.0/i18n/zh-Hans/lifecycle-management/**']
+- any: [ 'controllers/**/*' ]
+- any: [ 'service/**/*' ]
 
 area/lifecycle-management:
-  - any: [ 'pkg/**/*' ]
-  - any: [ 'staging/**/*' ]
-  - any: [ 'docs/4.0/docs/lifecycle-management/**/*' ]
-  - any: [ 'docs/4.0/i18n/zh-Hans/lifecycle-management/**/*' ]
-
+- any: [ 'lifecycle/pkg/**/*' ]
+- any: [ 'lifecycle/staging/**/*' ]
 
 area/frontend:
-  - any: [ 'frontend/**/*' ]
+- any: [ 'frontend/**/*' ]
 
 area/ci:
-  - 'scripts/**/*'
-  - 'docker/**/*'
-  - 'deploy/**/*'
-  - '.golangci.yml'
-  - '.goreleaser.yml'
-  - 'Makefile'
+- 'scripts/**/*'
+- 'lifecycle/scripts/**/*'
+- 'lifecycle/docker/**/*'
+- '.golangci.yml'
+- 'lifecycle/.goreleaser.yml'
+- 'lifecycle/Makefile'
 
 area/workflow:
-  - any: [ '.github/**/*' ]
+- any: [ '.github/**/*' ]

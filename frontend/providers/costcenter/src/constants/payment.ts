@@ -1,12 +1,13 @@
-import * as yaml from 'js-yaml';
 import { CRDMeta } from '@/types/crd';
 import { endOfDay, getMonth, getYear } from 'date-fns';
+import * as yaml from 'js-yaml';
+import { CircuitBoard, Cpu, HardDrive, HdmiPort, MemoryStick, Network } from 'lucide-react';
 export type PaymentForm = {
   paymentName: string;
   namespace: string;
   userId: string;
   amount: string;
-  paymentMethod: 'wechat' | 'stripe';
+  paymentMethod: 'wechat' | 'alipay' | 'stripe';
 };
 
 export const paymentMeta: CRDMeta = {
@@ -88,10 +89,67 @@ export const NOW_WEEK = 0;
 export const START_TIME = new Date(2023, 0, 1);
 export const END_TIME = endOfDay(new Date());
 export const valuationMap = new Map([
-  ['cpu', { unit: 'Core', scale: 1000, bg: '#33BABB', idx: 0 }],
-  ['memory', { unit: 'GB', scale: 1024, bg: '#36ADEF', idx: 1 }],
-  ['storage', { unit: 'GB', scale: 1024, bg: '#9A8EE0', idx: 2 }],
-  ['gpu', { unit: 'GPU', scale: 1000, bg: '#6FCA88', idx: 3 }],
-  ['network', { unit: 'M', scale: 1, bg: '#F182AA', idx: 4 }],
-  ['services.nodeports', { unit: '', scale: 1, bg: '#F182AA', idx: 4 }]
-]);
+  [
+    'cpu',
+    {
+      icon: Cpu,
+      unit: 'cpu_core',
+      scale: 1000,
+      idx: 0
+    }
+  ],
+  [
+    'memory',
+    {
+      icon: MemoryStick,
+      unit: 'memory_gb',
+      scale: 1024,
+      idx: 1
+    }
+  ],
+  [
+    'storage',
+    {
+      icon: HardDrive,
+      unit: 'storage_gb',
+      scale: 1024,
+      idx: 2
+    }
+  ],
+  [
+    'gpu',
+    {
+      icon: CircuitBoard,
+      unit: 'gpu',
+      scale: 1,
+      idx: 3
+    }
+  ],
+  [
+    'network',
+    {
+      icon: Network,
+      unit: 'network_m',
+      scale: 1,
+      idx: 4
+    }
+  ],
+  [
+    'nodeport',
+    {
+      icon: HdmiPort,
+      unit: 'port',
+      scale: 1,
+      idx: 5
+    }
+  ],
+  [
+    'traffic',
+    {
+      icon: Network,
+      unit: 'traffic_gb',
+      scale: 1024 * 1024 * 1024,
+      idx: 6
+    }
+  ]
+] as const);

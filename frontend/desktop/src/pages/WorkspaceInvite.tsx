@@ -1,34 +1,30 @@
-import type { NextPage } from 'next';
-import { useRouter } from 'next/router';
-import useSessionStore from '@/stores/session';
-import { Button, Flex, HStack, Image, Spinner, Text, VStack } from '@chakra-ui/react';
-import { isString } from 'lodash';
-import { dehydrate, QueryClient, useMutation, useQuery } from '@tanstack/react-query';
-import {
-  getInviteCodeInfoRequest,
-  nsListRequest,
-  reciveAction,
-  verifyInviteCodeRequest
-} from '@/api/namespace';
+import { getInviteCodeInfoRequest, reciveAction, verifyInviteCodeRequest } from '@/api/namespace';
 import useCallbackStore from '@/stores/callback';
-import { useEffect } from 'react';
+import { useConfigStore } from '@/stores/config';
+import useSessionStore from '@/stores/session';
+import { ROLE_LIST, UserRole } from '@/types/team';
+import { ensureLocaleCookie } from '@/utils/ssrLocale';
+import { Button, Flex, Image, Text, VStack } from '@chakra-ui/react';
+import { track } from '@sealos/gtm';
+import { dehydrate, QueryClient, useMutation, useQuery } from '@tanstack/react-query';
+import { isString } from 'lodash';
+import type { NextPage } from 'next';
 import { useTranslation } from 'next-i18next';
-import { ImageFallBackUrl } from '@/stores/config';
-import { ROLE_LIST } from '@/types/team';
-import { compareFirstLanguages } from '@/utils/tools';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
+import { useRouter } from 'next/router';
+import { useEffect } from 'react';
 
 const Callback: NextPage = () => {
   const router = useRouter();
+  const { layoutConfig } = useConfigStore();
   const { token: curToken, session } = useSessionStore((s) => s);
   const { lastWorkSpaceId } = useSessionStore();
+  const logo = useConfigStore().layoutConfig?.logo;
   const { setWorkspaceInviteCode } = useCallbackStore();
   const { t } = useTranslation();
-  const verifyMutation = useMutation({
-    mutationFn: verifyInviteCodeRequest
-  });
+
   const inviteTips = ({ managerName, teamName, role }: Record<string, string>) =>
-    t('Receive Tips', {
+    t('common:receive_tips', {
       managerName,
       teamName,
       role
@@ -47,6 +43,20 @@ const Callback: NextPage = () => {
       }),
     enabled: isString(inviteCode)
   });
+
+  const verifyMutation = useMutation({
+    mutationFn: verifyInviteCodeRequest,
+    onSuccess: (_data, variables) => {
+      if (variables.action === reciveAction.Accepte) {
+        track('workspace_join', {
+          module: 'workspace',
+          trigger: 'invite',
+          role: infoResp?.data?.data!.role === UserRole.Manager ? 'manager' : 'developer'
+        });
+      }
+    }
+  });
+
   const reset = () => {
     setWorkspaceInviteCode();
     router.replace('/');
@@ -69,17 +79,16 @@ const Callback: NextPage = () => {
       return () => clearTimeout(tag);
     }
   }, [statusCode, isValid, router]);
-  const acceptHandle = async () => {
+  const acceptHandle = async () =>
     verifyMutation
       .mutateAsync({
         code: inviteCode as string,
         action: reciveAction.Accepte
       })
-      .then(() => {
+      .finally(() => {
         reset();
         return;
       });
-  };
   const cancelHandle = () => {
     if (!isValid) return;
     reset();
@@ -112,16 +121,15 @@ const Callback: NextPage = () => {
           color={'white'}
           gap={'8px'}
         >
-          {' '}
-          <Image boxSize={'34px'} borderRadius="full" src={ImageFallBackUrl} alt="logo" />
+          <Image boxSize={'34px'} borderRadius="full" src={logo} alt="logo" />
           <Text fontWeight={700} fontSize={'24px'}>
-            Sealos
+            {layoutConfig?.title ?? 'Sealos'}
           </Text>
         </Flex>
         {isValid ? (
           <VStack gap={'40px'} alignItems={'center'} flex={1}>
             <Text fontSize={'30px'} fontWeight={'600'} mt={'60px'}>
-              {t('Invitation reminder')}
+              {t('common:invitation_reminder')}
             </Text>
             <Text fontSize={'16px'} fontWeight={'400'} mb={'40px'} w={'330px'}>
               {inviteTips({
@@ -140,16 +148,16 @@ const Callback: NextPage = () => {
                 await acceptHandle();
               }}
             >
-              {t('Accept Invitation')}
+              {t('common:accept_invitation')}
             </Button>
           </VStack>
         ) : infoResp.isError ? (
           <VStack alignItems={'center'} gap={'40px'} flex={1} justifyContent={'center'}>
             <Text fontSize={'30px'} fontWeight={'600'}>
-              {t('Invalid invitation link')}
+              {t('common:invalid_invitation_link')}
             </Text>
             <Text fontSize={'16px'} fontWeight={'400'} maxW={'330px'}>
-              {t('Redirecting to homepage in 3 seconds')}
+              {t('common:redirecting_to_homepage_in_3_seconds')}
             </Text>
           </VStack>
         ) : null}
@@ -158,9 +166,7 @@ const Callback: NextPage = () => {
   );
 };
 export async function getServerSideProps({ req, res, locales }: any) {
-  const local =
-    req?.cookies?.NEXT_LOCALE || compareFirstLanguages(req?.headers?.['accept-language'] || 'zh');
-  res.setHeader('Set-Cookie', `NEXT_LOCALE=${local}; Max-Age=2592000; Secure; SameSite=None`);
+  const local = ensureLocaleCookie({ req, res, defaultLocale: 'en' });
 
   const queryClient = new QueryClient();
   const props = {

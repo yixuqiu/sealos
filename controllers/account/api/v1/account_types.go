@@ -17,9 +17,8 @@ limitations under the License.
 package v1
 
 import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"github.com/labring/sealos/controllers/pkg/common"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -34,8 +33,9 @@ type (
 const (
 	// Consumption 消费
 	Consumption common.Type = iota
-	// Recharge 充值
-	Recharge
+	// Subconsumption 子消费
+	SubConsumption
+
 	TransferIn
 	TransferOut
 	ActivityGiving
@@ -70,7 +70,8 @@ const (
 Query the Charging status Order, and get it status, if success, add the Amount to Account Balance the set status to closed.
 */
 
-// Account is for user balance, when the balance is 0, the controller will warn the user and clean all
+// Account is for user balance, when the balance is 0, the controller will warn the user and clean
+// all
 // namespace create by the user.
 
 type Charge struct {
@@ -97,7 +98,7 @@ type AccountStatus struct {
 	Balance int64 `json:"balance,omitempty"`
 	// ActivityBonus: for demonstration purposes only and does not participate in calculation
 	ActivityBonus int64 `json:"activityBonus,omitempty"`
-	//Deduction amount
+	// Deduction amount
 	DeductionBalance int64 `json:"deductionBalance,omitempty"`
 	// EncryptDeductionBalance is to encrypt DeductionBalance
 	EncryptDeductionBalance *string `json:"encryptDeductionBalance,omitempty"`
@@ -122,11 +123,7 @@ type Account struct {
 
 // AccountList contains a list of Account
 type AccountList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
+	metav1.TypeMeta `          json:",inline"`
+	metav1.ListMeta `          json:"metadata,omitempty"`
 	Items           []Account `json:"items"`
-}
-
-func init() {
-	SchemeBuilder.Register(&Account{}, &AccountList{})
 }

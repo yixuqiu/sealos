@@ -3,7 +3,6 @@ import { ApiResp } from '@/types';
 import { NamespaceDto, UserRole, teamMessageDto } from '@/types/team';
 import { TeamUserDto } from '@/types/user';
 import { AxiosInstance } from 'axios';
-import { Session } from 'sealos-desktop-sdk/*';
 
 export const _abdicateRequest =
   (request: AxiosInstance) => (data: { ns_uid: string; targetUserCrUid: string }) =>
@@ -25,6 +24,11 @@ export const _deleteTeamRequest =
 export const _inviteMemberRequest =
   (request: AxiosInstance) => (props: { ns_uid: string; targetUserId: string; role: UserRole }) =>
     request.post<typeof props, ApiResp<null>>('/api/auth/namespace/invite', props);
+
+export const _setAliasRequest =
+  (request: AxiosInstance) =>
+  (props: { ns_uid: string; targetUserCrUid: string; alias: string | null }) =>
+    request.post<typeof props, ApiResp<null>>('/api/auth/namespace/setAlias', props);
 
 export const _modifyRoleRequest =
   (request: AxiosInstance) =>
@@ -78,12 +82,16 @@ export const _switchRequest = (request: AxiosInstance) => (ns_uid: string) =>
   request.post<any, ApiResp<{ token: string; appToken: string }>>('/api/auth/namespace/switch', {
     ns_uid
   });
+export const _renameRequest =
+  (request: AxiosInstance) => (data: { ns_uid: string; teamName: string }) =>
+    request.post<any, ApiResp<null>>('/api/auth/namespace/rename', data);
 // for prod/dev
 export const abdicateRequest = _abdicateRequest(request);
 export const createRequest = _createRequest(request);
 export const deleteTeamRequest = _deleteTeamRequest(request);
 export const inviteMemberRequest = _inviteMemberRequest(request);
 export const modifyRoleRequest = _modifyRoleRequest(request);
+export const setAliasRequest = _setAliasRequest(request);
 export const nsListRequest = _nsListRequest(request);
 export const verifyInviteRequest = _verifyInviteRequest(request);
 export const removeMemberRequest = _removeMemberRequest(request);
@@ -93,3 +101,4 @@ export const switchRequest = _switchRequest(request);
 export const getInviteCodeRequest = _getInviteCodeRequest(request);
 export const getInviteCodeInfoRequest = _getInviteCodeInfoRequest(request);
 export const verifyInviteCodeRequest = _verifyInviteCodeRequest(request);
+export const renameRequest = _renameRequest(request);

@@ -1,23 +1,43 @@
-import request from '@/services/request';
-import { Box, Divider, HStack, Text, useDisclosure } from '@chakra-ui/react';
-import { ExchangeIcon, InfoIcon, ProviderIcon } from '@sealos/ui';
-import { useQuery } from '@tanstack/react-query';
-import { useTranslation } from 'next-i18next';
-import { useMemo } from 'react';
-import useSessionStore from '@/stores/session';
-import { useRouter } from 'next/router';
 import { regionList as getRegionList } from '@/api/auth';
+import request from '@/services/request';
+import useSessionStore from '@/stores/session';
 import { ApiResp, Region } from '@/types';
-import { jwtDecode } from 'jwt-decode';
 import { AccessTokenPayload } from '@/types/token';
+import {
+  Box,
+  Center,
+  Divider,
+  Flex,
+  HStack,
+  Img,
+  Popover,
+  PopoverBody,
+  PopoverContent,
+  PopoverTrigger,
+  Text,
+  useDisclosure,
+  VStack
+} from '@chakra-ui/react';
+import { useQuery } from '@tanstack/react-query';
+import { jwtDecode } from 'jwt-decode';
+import { useTranslation } from 'next-i18next';
+import { useRouter } from 'next/router';
+import { useMemo } from 'react';
+import { useConfigStore } from '@/stores/config';
+import { CheckIcon, ChevronDown } from 'lucide-react';
+import { I18nCloudProvidersKey } from '@/types/i18next';
+import { persistMarketingQuery, resolveMarketingQuery } from '@/utils/marketing-attribution';
 
 export default function RegionToggle() {
-  const disclosure = useDisclosure();
   const { setWorkSpaceId, session } = useSessionStore();
+  const { cloudConfig } = useConfigStore();
   const { t, i18n } = useTranslation();
-  const { t: providerT } = useTranslation('cloudProviders');
   const router = useRouter();
-  const { data, isSuccess } = useQuery(['regionlist'], getRegionList);
+  const { data } = useQuery(['regionlist'], getRegionList, {
+    cacheTime: 5 * 60 * 1000,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false
+  });
   const regionList = useMemo(() => data?.data?.regionList || [], [data]);
   const token = useSessionStore((s) => s.token);
   const curRegionUid = useMemo(() => {
@@ -31,127 +51,193 @@ export default function RegionToggle() {
 
   const handleCick = async (region: Region) => {
     setWorkSpaceId(session?.user?.ns_uid || '');
-    const target = new URL(`https://${region.domain}/switchRegion`);
+    const target = new URL(
+      cloudConfig?.proxyDomain
+        ? `https://${cloudConfig?.proxyDomain}/switchRegion`
+        : `https://${region.domain}/switchRegion`
+    );
     const res = await request.get<any, ApiResp<{ token: string }>>('/api/auth/globalToken');
     const token = res?.data?.token;
     if (!token) return;
     target.searchParams.append('token', token);
+    target.searchParams.append('regionId', region.uid);
+    target.searchParams.append('regionDomain', region.domain);
+    const marketingQuery = resolveMarketingQuery(router.query);
+    persistMarketingQuery(marketingQuery);
+    Object.entries(marketingQuery).forEach(([key, value]) => {
+      if (value) target.searchParams.set(key, value);
+    });
     await router.replace(target);
   };
 
   return (
-    <>
-      {regionList?.length > 1 && (
-        <HStack
-          // fix for blur
-          position={'relative'}
-        >
+    <Box>
+      {/* Disable interactions when there's only one region */}
+      {regionList?.length <= 1 ? (
+        <HStack position={'relative'} tabIndex={0}>
           <HStack
-            borderRadius={'10px'}
-            p={'8px 12px'}
-            gap={'20px'}
-            background={'rgba(244, 246, 248, 0.6)'}
-            boxShadow={'0px 1px 2px rgba(0, 0, 0, 0.2)'}
+            w={'full'}
             fontSize={'14px'}
-            color={'#152539'}
+            color={'primary'}
             fontWeight={'500'}
-            backdropFilter={'blur(8px)'}
-            onClick={() => disclosure.onOpen()}
+            minH={'36px'}
+            userSelect={'none'}
+            position={'relative'}
+            gap={'8px'}
+            borderRadius={'8px'}
+            pl={'12px'}
+            pr={'8px'}
           >
-            <Text>
-              {providerT(curRegion?.location || '')} {curRegion?.description?.serial}
-            </Text>
-            <ExchangeIcon />
+            <Text>{curRegion?.displayName}</Text>
           </HStack>
-
-          {disclosure.isOpen ? (
+        </HStack>
+      ) : (
+        <Popover placement="bottom-start" isLazy>
+          {({ isOpen }) => (
             <>
-              <Box
-                position={'fixed'}
-                inset={0}
-                zIndex={'998'}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  disclosure.onClose();
-                }}
-              ></Box>
-              <Box position={'absolute'} inset={0} zIndex={'999'}>
-                <Box
-                  bgColor={'red'}
-                  bg="rgba(255, 255, 255, 0.8)"
-                  boxShadow={'0px 1px 2px rgba(0, 0, 0, 0.2)'}
-                  position={'absolute'}
-                  top="43px"
-                  right={0}
+              <PopoverTrigger>
+                <HStack position={'relative'} tabIndex={0}>
+                  <HStack
+                    w={'full'}
+                    fontSize={'14px'}
+                    color={'primary'}
+                    fontWeight={'500'}
+                    minH={'36px'}
+                    cursor={'pointer'}
+                    userSelect={'none'}
+                    position={'relative'}
+                    gap={'8px'}
+                    _hover={{
+                      bg: 'secondary'
+                    }}
+                    bg={isOpen ? 'secondary' : ''}
+                    borderRadius={'8px'}
+                    pl={'12px'}
+                    pr={'8px'}
+                  >
+                    <Text cursor={'pointer'}>{curRegion?.displayName}</Text>
+                    <Center
+                      transform={isOpen ? 'rotate(-90deg)' : 'rotate(0deg)'}
+                      borderRadius={'4px'}
+                      transition={'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)'}
+                    >
+                      <ChevronDown size={16} color={'#525252'} />
+                    </Center>
+                  </HStack>
+                </HStack>
+              </PopoverTrigger>
+
+              <PopoverContent width={'fit-content'}>
+                <PopoverBody
                   cursor={'initial'}
-                  borderRadius={'8px'}
-                  p="20px"
-                  backdropFilter={'blur(150px)'}
+                  borderRadius={'12px'}
+                  p={'0'}
+                  py={'8px'}
+                  background={'#FFF'}
+                  boxShadow={
+                    '0px 20px 25px -5px rgba(0, 0, 0, 0.10), 0px 10px 10px -5px rgba(0, 0, 0, 0.04)'
+                  }
+                  color={'#18181B'}
+                  width={'fit-content'}
+                  transition={'all 0.2s ease-in-out'}
                 >
-                  <HStack gap={'12px'} alignItems={'stretch'}>
+                  <Text
+                    px={'12px'}
+                    py={'6px'}
+                    color={'#71717A'}
+                    fontSize={'12px'}
+                    fontWeight={'500'}
+                  >
+                    {t('common:region')}
+                  </Text>
+                  <VStack alignItems={'stretch'} px={'8px'}>
                     {regionList.map((region) => {
                       const cpuPrice = region?.description?.prices?.find((p) => p.name === 'CPU');
                       return (
-                        <Box
-                          bgColor={'rgba(255, 255, 255, 0.75)'}
-                          borderRadius={'8px'}
-                          // minW={'165px'}
-                          // minH={'200px'}
+                        <Flex
+                          border={'1px solid #E4E4E7'}
+                          flexDirection={'column'}
+                          fontSize={'14px'}
+                          whiteSpace={'nowrap'}
+                          borderRadius={'12px'}
                           py={'12px'}
+                          px={'16px'}
                           key={region.uid}
-                          {...(region.uid === curRegionUid
-                            ? {
-                                border: '1.5px solid #219BF4'
-                              }
-                            : {
-                                async onClick() {
-                                  await handleCick(region);
-                                },
-                                cursor: 'pointer',
-                                _hover: {
-                                  bgColor: 'rgba(255, 255, 255, 0.5)'
-                                }
-                              })}
-                          // aspectRatio={'16/20'}
+                          onClick={() => {
+                            handleCick(region);
+                          }}
+                          cursor={'pointer'}
+                          _hover={{
+                            bgColor: '#FAFAFA'
+                          }}
                         >
-                          <Box px={'16px'} fontSize={'14px'} fontWeight={'500'}>
-                            <Text color={'#152539'}>
-                              {providerT(region?.location)} {region?.description?.serial}
-                            </Text>
-                            {cpuPrice && (
-                              <Text color={'#0884DD'} whiteSpace={'nowrap'}>
-                                {cpuPrice?.name} {cpuPrice?.unit_price || 0} {t('Yuan')}/{t('Core')}
-                                /{t('Year')}
+                          <Flex justifyContent={'space-between'} alignItems={'center'}>
+                            <Box>
+                              <Text fontSize={'14px'} fontWeight={400} color={'#18181B'}>
+                                {region?.displayName} {region?.description?.serial}
                               </Text>
+                              {cpuPrice && (
+                                <Text
+                                  mt={'4px'}
+                                  color={'#71717A'}
+                                  fontSize={'12px'}
+                                  whiteSpace={'nowrap'}
+                                >
+                                  {cpuPrice?.name} {cpuPrice?.unit_price || 0} {t('common:yuan')}/
+                                  {t('common:core')}/{t('common:year')}
+                                </Text>
+                              )}
+                            </Box>
+                            {region.uid === curRegionUid && (
+                              <CheckIcon size={16} color={'#1C4EF5'} />
                             )}
-                          </Box>
-                          <Divider color={'#0000000D'} my={'12px'} />
-                          <Box px={'16px'} fontSize={'11px'} fontWeight={'500'}>
-                            <HStack color={'#485264'} gap={'4px'} mb={'2px'}>
-                              <ProviderIcon boxSize={'12px'} />
-                              <Text>{providerT('Provider')}</Text>
-                            </HStack>
-                            <Text color={'#111824'} mb={'8px'}>
-                              {providerT(region?.description?.provider)}
-                            </Text>
-                            <HStack color={'#485264'} gap={'4px'} mb={'2px'}>
-                              <InfoIcon boxSize={'12px'} />
-                              <Text>{t('Description')}</Text>
-                            </HStack>
-                            <Text color={'#111824'} lineHeight={'20px'}>
+                          </Flex>
+                          <Divider bg={'#F4F4F5'} my={'8px'} />
+                          <Flex alignItems={'center'} flexDirection={{ base: 'column', sm: 'row' }}>
+                            <Flex alignItems={'center'} gap={'4px'}>
+                              {region?.description.provider &&
+                                [
+                                  'volcano_engine',
+                                  'alibaba_cloud',
+                                  'tencent_cloud',
+                                  'google_cloud'
+                                ].includes(region?.description.provider) && (
+                                  <Img
+                                    boxSize={'14px'}
+                                    mr={'4px'}
+                                    flexShrink={0}
+                                    src={`/images/cloud_providers/${region?.description.provider}.svg`}
+                                  ></Img>
+                                )}
+                              <Text color={'#71717A'}>
+                                {t(region?.description?.provider as I18nCloudProvidersKey, {
+                                  ns: 'cloudProviders'
+                                })}
+                              </Text>
+                            </Flex>
+
+                            <Divider
+                              orientation={'vertical'}
+                              h={'8px'}
+                              bg={'#E4E4E7'}
+                              mx={'8px'}
+                              flexShrink={0}
+                              display={{ base: 'none', sm: 'block' }}
+                            />
+                            <Text color={'#71717A'}>
                               {region?.description?.description?.[i18n.language as 'zh' | 'en']}
                             </Text>
-                          </Box>
-                        </Box>
+                          </Flex>
+                        </Flex>
                       );
                     })}
-                  </HStack>
-                </Box>
-              </Box>
+                  </VStack>
+                </PopoverBody>
+              </PopoverContent>
             </>
-          ) : null}
-        </HStack>
+          )}
+        </Popover>
       )}
-    </>
+    </Box>
   );
 }

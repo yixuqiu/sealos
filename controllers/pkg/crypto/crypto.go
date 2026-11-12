@@ -30,7 +30,7 @@ import (
 	"strconv"
 )
 
-const defaultEncryptionKey = "0123456789ABCDEF0123456789ABCDEF"
+const defaultEncryptionKey = "Bg1c3Dd5e9e0F84bdF0A5887cF43aB63"
 
 var encryptionKey = defaultEncryptionKey
 
@@ -40,7 +40,7 @@ func Encrypt(plaintext []byte) (string, error) {
 }
 
 // EncryptWithKey encrypts the given plaintext using AES-GCM.
-func EncryptWithKey(plaintext []byte, encryptionKey []byte) (string, error) {
+func EncryptWithKey(plaintext, encryptionKey []byte) (string, error) {
 	block, err := aes.NewCipher(encryptionKey)
 	if err != nil {
 		return "", err
@@ -77,56 +77,6 @@ func DecryptInt64(in string) (int64, error) {
 		return 0, fmt.Errorf("failed to decrpt balance: %w", err)
 	}
 	return strconv.ParseInt(string(out), 10, 64)
-}
-
-func DecryptFloat64(in string) (float64, error) {
-	out, err := Decrypt(in)
-	if err != nil {
-		return 0, fmt.Errorf("failed to decrpt balance: %w", err)
-	}
-	return strconv.ParseFloat(string(out), 64)
-}
-
-func EncryptFloat64(in float64) (*string, error) {
-	out, err := Encrypt([]byte(strconv.FormatFloat(in, 'f', -1, 64)))
-	return &out, err
-}
-
-// DecryptInt64WithKey decrypts the given ciphertext using AES-GCM.
-func DecryptInt64WithKey(in string, encryptionKey []byte) (int64, error) {
-	out, err := DecryptWithKey(in, encryptionKey)
-	if err != nil {
-		return 0, fmt.Errorf("failed to decrpt balance: %w", err)
-	}
-	return strconv.ParseInt(string(out), 10, 64)
-}
-
-func RechargeBalance(rawBalance *string, amount int64) error {
-	balanceInt, err := DecryptInt64(*rawBalance)
-	if err != nil {
-		return fmt.Errorf("failed to recharge balance: %w", err)
-	}
-	balanceInt += amount
-	encryptBalance, err := EncryptInt64(balanceInt)
-	if err != nil {
-		return fmt.Errorf("failed to recharge balance: %w", err)
-	}
-	*rawBalance = *encryptBalance
-	return nil
-}
-
-func DeductBalance(balance *string, amount int64) error {
-	balanceInt, err := DecryptInt64(*balance)
-	if err != nil {
-		return fmt.Errorf("failed to deduct balance: %w", err)
-	}
-	balanceInt -= amount
-	encryptBalance, err := EncryptInt64(balanceInt)
-	if err != nil {
-		return fmt.Errorf("failed to deduct balance: %w", err)
-	}
-	*balance = *encryptBalance
-	return nil
 }
 
 // Decrypt decrypts the given ciphertext using AES-GCM.
@@ -181,4 +131,34 @@ func ParseRSAPublicKeyFromPEM(keyPEM string) (*rsa.PublicKey, error) {
 		return nil, errors.New("key is not of type *rsa.PublicKey")
 	}
 	return rsaPub, nil
+}
+
+// ParseRSAPublicKeyFromAnyPEM tries to parse a public key; if the PEM contains a private key it derives the public part.
+func ParseRSAPublicKeyFromAnyPEM(keyPEM string) (*rsa.PublicKey, error) {
+	block, _ := pem.Decode([]byte(keyPEM))
+	if block == nil {
+		return nil, errors.New("failed to parse PEM block")
+	}
+	switch block.Type {
+	case "PUBLIC KEY":
+		return ParseRSAPublicKeyFromPEM(keyPEM)
+	case "RSA PRIVATE KEY":
+		priv, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+		if err != nil {
+			return nil, err
+		}
+		return &priv.PublicKey, nil
+	case "PRIVATE KEY":
+		privAny, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+		if err != nil {
+			return nil, err
+		}
+		priv, ok := privAny.(*rsa.PrivateKey)
+		if !ok {
+			return nil, errors.New("private key is not RSA")
+		}
+		return &priv.PublicKey, nil
+	default:
+		return nil, fmt.Errorf("unsupported key type %q", block.Type)
+	}
 }

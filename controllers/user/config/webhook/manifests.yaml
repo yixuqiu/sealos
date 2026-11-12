@@ -16,7 +16,6 @@
 apiVersion: admissionregistration.k8s.io/v1
 kind: MutatingWebhookConfiguration
 metadata:
-  creationTimestamp: null
   name: mutating-webhook-configuration
 webhooks:
 - admissionReviewVersions:
@@ -63,7 +62,6 @@ webhooks:
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
 metadata:
-  creationTimestamp: null
   name: validating-webhook-configuration
 webhooks:
 - admissionReviewVersions:
@@ -93,6 +91,7 @@ webhooks:
       name: webhook-service
       namespace: system
       path: /validate-user-sealos-io-v1-user
+  timeoutSeconds: 30
   failurePolicy: Fail
   name: vuser.kb.io
   rules:

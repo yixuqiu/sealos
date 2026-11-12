@@ -15,17 +15,9 @@ endif
 # build image
 buildTargets := \
 	desktop \
-	providers/terminal \
-	providers/adminer \
 	providers/costcenter \
-	providers/dbprovider \
-	providers/applaunchpad \
 	providers/imagehub \
-	providers/template \
-	providers/cronjob \
-	providers/license \
-	providers/kubepanel \
-	providers/objectstorage
+	providers/license
 
 buildTargets-all := $(addprefix image-build-,$(buildTargets))
 pushTargets-all := $(addprefix image-push-,$(buildTargets))

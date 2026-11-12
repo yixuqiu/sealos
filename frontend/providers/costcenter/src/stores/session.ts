@@ -1,13 +1,12 @@
-import type { Session, SessionV1 } from 'sealos-desktop-sdk';
 import { sessionKey } from '@/types/session';
+import * as yaml from 'js-yaml';
+import type { SessionV1 } from 'sealos-desktop-sdk';
 import { create } from 'zustand';
 import { devtools, persist } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
-import * as yaml from 'js-yaml';
 
 type SessionState = {
   session: SessionV1;
-  locale: string;
   setSession: (ss: SessionV1) => void;
   setSessionProp: (key: keyof SessionV1, value: any) => void;
   getSession: () => SessionV1;
@@ -21,7 +20,6 @@ const useSessionStore = create<SessionState>()(
     persist(
       immer((set, get) => ({
         session: {} as SessionV1,
-        locale: 'zh',
         setSession: (ss: SessionV1) => set({ session: ss }),
         setSessionProp: (key: keyof SessionV1, value: any) => {
           set((state) => {

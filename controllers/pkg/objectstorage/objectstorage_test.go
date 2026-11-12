@@ -16,7 +16,6 @@ package objectstorage
 
 import (
 	"fmt"
-	objectstoragev1 "github/labring/sealos/controllers/objectstorage/api/v1"
 	"os"
 	"strconv"
 	"testing"
@@ -24,40 +23,110 @@ import (
 )
 
 func TestGetUserObjectStorageFlow(t *testing.T) {
-	cli, err := objectstoragev1.NewOSClient(os.Getenv("MINIO_ENDPOINT"), os.Getenv("MINIO_ACCESS_KEY"), os.Getenv("MINIO_SECRET_KEY"))
+	requireObjectStorageTest(t,
+		"MINIO_ENDPOINT",
+		"MINIO_ACCESS_KEY",
+		"MINIO_SECRET_KEY",
+		"PROM_URL",
+		"MINIO_USERNAME",
+		"MINIO_INSTANCE",
+	)
+	cli, err := NewOSClient(
+		os.Getenv("MINIO_ENDPOINT"),
+		os.Getenv("MINIO_ACCESS_KEY"),
+		os.Getenv("MINIO_SECRET_KEY"),
+	)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	start := time.Now().Truncate(time.Hour).Add(-time.Hour)
-	bytes, err := GetUserObjectStorageFlow(cli, os.Getenv("PROM_URL"), os.Getenv("MINIO_USERNAME"), os.Getenv("MINIO_INSTANCE"), start, start.Add(time.Hour))
+	bytes, err := GetUserObjectStorageFlow(
+		cli,
+		os.Getenv("PROM_URL"),
+		os.Getenv("MINIO_USERNAME"),
+		os.Getenv("MINIO_INSTANCE"),
+		start,
+		start.Add(time.Hour),
+	)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	t.Log(ConvertBytes(bytes))
 }
 
 func ConvertBytes(bytes int64) string {
-	if bytes < 1024 {
+	switch {
+	case bytes < 1024:
 		return strconv.FormatInt(bytes, 10) + "B"
-	} else if bytes < 1024*1024 {
+	case bytes < 1024*1024:
 		return strconv.FormatFloat(float64(bytes)/1024, 'f', 2, 64) + "KB"
-	} else if bytes < 1024*1024*1024 {
+	case bytes < 1024*1024*1024:
 		return strconv.FormatFloat(float64(bytes)/1024/1024, 'f', 2, 64) + "MB"
-	} else {
+	default:
 		return strconv.FormatFloat(float64(bytes)/1024/1024/1024, 'f', 2, 64) + "GB"
 	}
 }
 
 func TestQueryUserUsage(t *testing.T) {
-	obClient, err := NewMetricsClient("objectstorageapi.192.168.0.55.nip.io", "username", "passw0rd", false)
+	requireObjectStorageTest(t,
+		"OBJECTSTORAGE_METRICS_ENDPOINT",
+		"OBJECTSTORAGE_METRICS_USERNAME",
+		"OBJECTSTORAGE_METRICS_PASSWORD",
+	)
+	obClient, err := NewMetricsClient(
+		os.Getenv("OBJECTSTORAGE_METRICS_ENDPOINT"),
+		os.Getenv("OBJECTSTORAGE_METRICS_USERNAME"),
+		os.Getenv("OBJECTSTORAGE_METRICS_PASSWORD"),
+		false,
+	)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	metrics, err := QueryUserUsage(obClient)
 	if err != nil {
-		t.Error(err)
+		t.Fatal(err)
 	}
 	for _, metric := range metrics {
 		fmt.Println(metric)
+	}
+}
+
+func TestQueryUserTraffic(t *testing.T) {
+	requireObjectStorageTest(t,
+		"OBJECTSTORAGE_METRICS_ENDPOINT",
+		"OBJECTSTORAGE_METRICS_USERNAME",
+		"OBJECTSTORAGE_METRICS_PASSWORD",
+	)
+	obClient, err := NewMetricsClient(
+		os.Getenv("OBJECTSTORAGE_METRICS_ENDPOINT"),
+		os.Getenv("OBJECTSTORAGE_METRICS_USERNAME"),
+		os.Getenv("OBJECTSTORAGE_METRICS_PASSWORD"),
+		false,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	metrics, err := QueryUserUsageAndTraffic(obClient)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for user, metric := range metrics {
+		fmt.Println("user:", user)
+		fmt.Println("usage:", metric.Usage)
+		fmt.Println("sent:", metric.Sent)
+		fmt.Println("received:", metric.Received)
+	}
+}
+
+func requireObjectStorageTest(t *testing.T, envNames ...string) {
+	t.Helper()
+	if os.Getenv("RUN_OBJECTSTORAGE_TESTS") != "true" {
+		t.Skip("set RUN_OBJECTSTORAGE_TESTS=true to run object storage tests")
+	}
+	for _, name := range envNames {
+		if os.Getenv(name) == "" {
+			t.Skipf("requires %s", name)
+		}
 	}
 }

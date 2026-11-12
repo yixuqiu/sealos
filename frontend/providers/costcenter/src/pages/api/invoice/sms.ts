@@ -1,52 +1,39 @@
-import { NextApiRequest, NextApiResponse } from 'next';
+import { Config } from '@/config';
+import { addOrUpdateCode, checkSendable } from '@/service/backend/db/verifyCode';
+import { jsonRes } from '@/service/backend/response';
+import { getClientIPFromRequest, retrySerially } from '@/utils/tools';
 import Dysmsapi, * as dysmsapi from '@alicloud/dysmsapi20170525';
 import * as OpenApi from '@alicloud/openapi-client';
 import * as Util from '@alicloud/tea-util';
-import { jsonRes } from '@/service/backend/response';
-import { addOrUpdateCode, checkSendable } from '@/service/backend/db/verifyCode';
-import { getClientIPFromRequest, retrySerially } from '@/utils/tools';
-import { authSession } from '@/service/backend/auth';
-import { enableInvoice } from '@/service/enabled';
-import * as process from 'process';
-const accessKeyId = process.env.ALI_ACCESS_KEY_ID;
-const accessKeySecret = process.env.ALI_ACCESS_KEY_SECRET;
-const templateCode = process.env.ALI_TEMPLATE_CODE;
-const signName = process.env.ALI_SIGN_NAME;
-const requestTimestamps: Record<string, number> = {};
-function checkRequestFrequency(ipAddress: string) {
-  const currentTime = Date.now();
-  const lastRequestTime = requestTimestamps[ipAddress] || 0;
-  const timeDiff = currentTime - lastRequestTime;
-
-  const requestInterval = 60 * 1000;
-
-  if (timeDiff < requestInterval) {
-    return false;
-  } else {
-    requestTimestamps[ipAddress] = currentTime;
-    return true;
-  }
-}
+import { NextApiRequest, NextApiResponse } from 'next';
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  const cfg = Config();
+  const accessKeyId = cfg.costCenter.invoice.aliSms.accessKeyID;
+  const accessKeySecret = cfg.costCenter.invoice.aliSms.accessKeySecret;
+  const templateCode = cfg.costCenter.invoice.aliSms.templateCode;
+  const signName = cfg.costCenter.invoice.aliSms.signName;
   try {
-    if (!enableInvoice()) {
+    if (!cfg.costCenter.invoice.enabled) {
       throw new Error('invoice is not enabled');
     }
-    const kc = await authSession(req.headers);
-    const user = kc.getCurrentUser();
-    if (user === null) {
-      return jsonRes(res, { code: 401, message: 'user null' });
+    if (process.env.NODE_ENV === 'development') {
+      return jsonRes(res, {
+        message: 'successfully',
+        code: 200
+      });
     }
     const { phoneNumbers } = req.body;
     let ip = getClientIPFromRequest(req);
 
     if (!ip) {
-      if (process.env.NODE_ENV === 'development') ip = '127.0.0.1';
-      else
-        return jsonRes(res, {
-          message: 'The IP is null',
-          code: 403
-        });
+      // if (process.env.NODE_ENV === 'development') {
+      // 	// ip = '127.0.0.1';
+      // }
+      // else
+      return jsonRes(res, {
+        message: 'The IP is null',
+        code: 403
+      });
     }
     if (
       !(await checkSendable({

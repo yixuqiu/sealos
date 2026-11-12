@@ -1,4 +1,7 @@
+import { Config } from '@/config';
 import { NextApiRequest } from 'next';
+import { AxiosInstance } from 'axios';
+import crypto from 'crypto';
 
 export const retrySerially = <T>(fn: () => Promise<T>, times: number) =>
   new Promise((res, rej) => {
@@ -16,7 +19,6 @@ export const retrySerially = <T>(fn: () => Promise<T>, times: number) =>
     };
     attempt();
   });
-import crypto from 'crypto';
 export function genSign(secret: string, timestamp: number | string) {
   const stringToSign = `${timestamp}\n${secret}`;
   const hmac = crypto.createHmac('sha256', stringToSign);
@@ -31,7 +33,7 @@ export const isValidCNTaxNumber = (taxNumber: string) => {
   return [15, 17, 18].includes(taxNumber.length);
 };
 export const isValidBANKAccount = (bankAccount: string) => {
-  const regExp = /^[0-9]{12,22}$/;
+  const regExp = /^\d+$/;
   return regExp.test(bankAccount);
 };
 export const isValidEmail = (email: string) => {
@@ -39,18 +41,41 @@ export const isValidEmail = (email: string) => {
   return regExp.test(email);
 };
 export function getClientIPFromRequest(req: NextApiRequest) {
-  // try to get ip from x-forwarded-for
-  const ips_str = req.headers['x-forwarded-for'] as string;
-  if (ips_str) {
-    const ips = ips_str.split(',');
-    return ips[0];
-  }
+  // Higress `addXRealIpHeader` replaces X-Real-IP with one downstream peer
+  // address, so there is no left/right selection as there is with XFF. This
+  // header is trustworthy only when untrusted callers cannot bypass Higress.
+  const realIp = req.headers['x-real-ip'];
+  const trustedIp = Array.isArray(realIp) ? realIp[0]?.trim() : realIp?.trim();
 
-  // try to get ip from x-real-ip
-  const ip = req.headers['x-real-ip'] as string;
-  if (ip) {
-    return ip;
-  }
-
-  return undefined;
+  return trustedIp || req.socket.remoteAddress;
 }
+
+type RealNameInfoResponse = {
+  data: {
+    userID: string;
+    isRealName: boolean;
+  };
+  error?: string;
+  message: string;
+};
+
+export const checkSealosUserIsRealName = async (client: AxiosInstance): Promise<boolean> => {
+  try {
+    if (!Config().costCenter.features.rechargeRequiresRealName) {
+      return true;
+    }
+
+    const response = await client.post('/account/v1alpha1/real-name-info');
+    const realNameInfoData: RealNameInfoResponse = await response.data;
+
+    if (realNameInfoData.error) {
+      console.error(realNameInfoData.error);
+      return false;
+    }
+
+    return realNameInfoData.data.isRealName;
+  } catch (error) {
+    console.error(error);
+    return false;
+  }
+};

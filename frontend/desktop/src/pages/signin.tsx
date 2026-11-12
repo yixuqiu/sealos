@@ -1,28 +1,103 @@
-import SigninComponent from '@/components/signin';
-import { compareFirstLanguages } from '@/utils/tools';
+// import SigninComponent from '@/components/signin';
+import { useConfigStore } from '@/stores/config';
+import { ensureLocaleCookie } from '@/utils/ssrLocale';
+import {
+  prepareInviteForSignin,
+  type SigninInviteIssue
+} from '@/services/backend/activity/registration';
+import { Box } from '@chakra-ui/react';
+import type { GetServerSidePropsContext } from 'next';
 import { QueryClient, dehydrate } from '@tanstack/react-query';
 import { serverSideTranslations } from 'next-i18next/serverSideTranslations';
+import Head from 'next/head';
 import { useEffect } from 'react';
+import { useRouter } from 'next/router';
+import Script from 'next/script';
+import useScriptStore from '@/stores/script';
+import SignLayout from '@/components/v2/SignLayout';
+import SigninComponent from '@/components/v2/Sign';
+import SigninInviteNotice from '@/components/v2/SigninInviteNotice';
+import { useSemParams } from '@/hooks/useSemParams';
+import { setAdClickData, setUserSemData } from '@/utils/sessionConfig';
+import { setPendingOauth2RequestId, setPendingCodeRequestId } from '@/utils/oauth2';
 
-export default function SigninPage() {
+export default function SigninPage({
+  inviteIssue = null
+}: {
+  inviteIssue?: SigninInviteIssue | null;
+}) {
+  const { layoutConfig, authConfig } = useConfigStore();
+  const { setCaptchaIsLoad } = useScriptStore();
+  const router = useRouter();
+
+  // Grab params from ad clicks and store in local storage
+  const { adClickData, semData } = useSemParams();
   useEffect(() => {
-    const url = sessionStorage.getItem('accessTemplatesNoLogin');
-    if (url) {
-      sessionStorage.clear();
-      window.location.replace(url);
+    if (adClickData) {
+      setAdClickData(adClickData);
     }
-  }, []);
 
-  return <SigninComponent />;
+    if (semData) {
+      setUserSemData(semData);
+    }
+  });
+
+  useEffect(() => {
+    if (!router.isReady) return;
+    const requestId =
+      typeof router.query.oauth2_request_id === 'string' ? router.query.oauth2_request_id : '';
+    if (requestId) {
+      setPendingOauth2RequestId(requestId);
+    }
+  }, [router.isReady, router.query.oauth2_request_id]);
+
+  useEffect(() => {
+    if (router.isReady && typeof router.query.oauth_code_request_id === 'string') {
+      setPendingCodeRequestId(router.query.oauth_code_request_id);
+    }
+  }, [router.isReady, router.query.oauth_code_request_id]);
+
+  return (
+    <Box>
+      <Head>
+        <title>{layoutConfig?.meta.title}</title>
+        <meta name="description" content={layoutConfig?.meta.description} />
+        <link rel="shortcut icon" href={layoutConfig?.logo ? layoutConfig?.logo : '/favicon.ico'} />
+        <link rel="icon" href={layoutConfig?.logo ? layoutConfig?.logo : '/favicon.ico'} />
+      </Head>
+      {authConfig?.captcha.ali.enabled && (
+        <Script
+          src="https://o.alicdn.com/captcha-frontend/aliyunCaptcha/AliyunCaptcha.js"
+          onLoad={() => {
+            setCaptchaIsLoad();
+          }}
+        />
+      )}
+      {/* {layoutConfig?.meta.scripts?.map((item, i) => {
+        return <Script key={i} {...item} />;
+      })} */}
+
+      <SignLayout>
+        <SigninComponent
+          notice={
+            inviteIssue && (
+              <SigninInviteNotice issue={inviteIssue} onRetry={() => router.reload()} />
+            )
+          }
+        />
+      </SignLayout>
+    </Box>
+  );
 }
 
-export async function getServerSideProps({ req, res, locales }: any) {
-  const local =
-    req?.cookies?.NEXT_LOCALE || compareFirstLanguages(req?.headers?.['accept-language'] || 'zh');
-  res.setHeader('Set-Cookie', `NEXT_LOCALE=${local}; Max-Age=2592000; Secure; SameSite=None`);
+export async function getServerSideProps({ req, res, query, locales }: GetServerSidePropsContext) {
+  res.setHeader('Cache-Control', 'private, no-store');
+  const local = ensureLocaleCookie({ req, res, defaultLocale: 'en' });
+  const inviteIssue = await prepareInviteForSignin({ req, res, invite: query.invite });
 
   const queryClient = new QueryClient();
   const props = {
+    inviteIssue,
     ...(await serverSideTranslations(local, undefined, null, locales || [])),
     dehydratedState: dehydrate(queryClient)
   };

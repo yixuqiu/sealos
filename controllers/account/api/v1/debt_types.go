@@ -40,25 +40,25 @@ const (
 	DaySecond  = 24 * 60 * 60
 )
 
+const (
+	LowBalancePeriod      DebtStatusType = "LowBalancePeriod"
+	CriticalBalancePeriod DebtStatusType = "CriticalBalancePeriod"
+	DebtPeriod            DebtStatusType = "DebtPeriod"
+	DebtDeletionPeriod    DebtStatusType = "DebtDeletionPeriod"
+)
+
 type DebtStatusType string
 
 var DefaultDebtConfig = map[DebtStatusType]int64{
-	//DebtStatusNormal: NormalPrice,
+	// DebtStatusNormal: NormalPrice,
 
-	//DebtStatusSmall:  SmallBlockWaitSecond,
+	// DebtStatusSmall:  SmallBlockWaitSecond,
 }
-
-const DebtNamespaceAnnoStatusKey = "debt.sealos/status"
-
-const (
-	NormalDebtNamespaceAnnoStatus  = "Normal"
-	SuspendDebtNamespaceAnnoStatus = "Suspend"
-	ResumeDebtNamespaceAnnoStatus  = "Resume"
-)
 
 // DebtSpec defines the desired state of Debt
 type DebtSpec struct {
 	UserName string `json:"userName,omitempty"`
+	UserID   string `json:"userID,omitempty"`
 }
 
 // DebtStatus defines the observed state of Debt
@@ -72,7 +72,7 @@ type DebtStatus struct {
 type DebtStatusRecord struct {
 	LastStatus    DebtStatusType `json:"lastDebtStatus,omitempty"`
 	CurrentStatus DebtStatusType `json:"currentStatus,omitempty"`
-	UpdateTime    int64          `json:"updateTime,omitempty"`
+	UpdateTime    metav1.Time    `json:"updateTime,omitempty"`
 }
 
 //+kubebuilder:object:root=true
@@ -95,8 +95,4 @@ type DebtList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Debt `json:"items"`
-}
-
-func init() {
-	SchemeBuilder.Register(&Debt{}, &DebtList{})
 }

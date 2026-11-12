@@ -23,6 +23,8 @@ import (
 type Global struct {
 	CloudDomain    string `yaml:"cloudDomain"`
 	CloudPort      string `yaml:"cloudPort"`
+	HTTPPort       string `yaml:"httpPort"`
+	DisableHTTPS   bool   `yaml:"disableHttps"`
 	RegionUID      string `yaml:"regionUID"`
 	CertSecretName string `yaml:"certSecretName"`
 }
@@ -44,7 +46,7 @@ type Database struct {
 	RegionalCockroachdbURI string `yaml:"regionalCockroachdbURI"`
 }
 
-func LoadConfig(path string, target interface{}) error {
+func LoadConfig(path string, target any) error {
 	configData, err := os.ReadFile(path)
 	if err != nil {
 		return err

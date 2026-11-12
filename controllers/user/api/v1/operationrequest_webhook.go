@@ -20,10 +20,10 @@ import (
 	"context"
 	"errors"
 
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 // log is for logging in this package.
@@ -32,8 +32,7 @@ var operationrequestlog = logf.Log.WithName("operationrequest-resource")
 func (r *Operationrequest) SetupWebhookWithManager(mgr ctrl.Manager) error {
 	m := &ReqMutator{Client: mgr.GetClient()}
 	v := &ReqValidator{Client: mgr.GetClient()}
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(r).
+	return ctrl.NewWebhookManagedBy(mgr, r).
 		WithDefaulter(m).
 		WithValidator(v).
 		Complete()
@@ -46,11 +45,7 @@ type ReqMutator struct {
 	client.Client
 }
 
-func (r ReqMutator) Default(_ context.Context, obj runtime.Object) error {
-	req, ok := obj.(*Operationrequest)
-	if !ok {
-		return errors.New("obj convert Operationrequest is error")
-	}
+func (r ReqMutator) Default(_ context.Context, req *Operationrequest) error {
 	// mutate the request with an owner label
 	operationrequestlog.Info("mutate", "name", req.Name)
 	req.ObjectMeta = initAnnotationAndLabels(req.ObjectMeta)
@@ -58,54 +53,65 @@ func (r ReqMutator) Default(_ context.Context, obj runtime.Object) error {
 	return nil
 }
 
-//+kubebuilder:webhook:path=/validate-user-sealos-io-v1-operationrequest,mutating=false,failurePolicy=fail,sideEffects=None,groups=user.sealos.io,resources=operationrequests,verbs=create;update,versions=v1,name=voperationrequest.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-user-sealos-io-v1-operationrequest,mutating=false,failurePolicy=fail,sideEffects=None,groups=user.sealos.io,resources=operationrequests,verbs=create;update,versions=v1,name=voperationrequest.kb.io,admissionReviewVersions=v1
 //+kubebuilder:object:generate=false
 
 type ReqValidator struct {
 	client.Client
 }
 
-func (r ReqValidator) ValidateCreate(ctx context.Context, obj runtime.Object) error {
-	req, ok := obj.(*Operationrequest)
-	if !ok {
-		return errors.New("obj convert Operationrequest is error")
-	}
-
-	// todo check request, _ := admission.RequestFromContext(ctx), request.UserInfo.Username if legal
+func (r ReqValidator) ValidateCreate(
+	ctx context.Context,
+	req *Operationrequest,
+) (admission.Warnings, error) {
+	// todo check request, _ := admission.RequestFromContext(ctx), request.UserInfo.Username if
+	// legal
 
 	// list all requests in the same namespace with a same owner
 	var reqList OperationrequestList
-	err := r.List(ctx, &reqList, client.InNamespace(req.Namespace), client.MatchingLabels{UserLabelOwnerKey: req.Spec.User})
+	err := r.List(
+		ctx,
+		&reqList,
+		client.InNamespace(req.Namespace),
+		client.MatchingLabels{UserLabelOwnerKey: req.Spec.User},
+	)
 	if client.IgnoreNotFound(err) != nil {
 		operationrequestlog.Error(err, "list operationrequest error")
-		return err
+		return admission.Warnings{"list operationrequest error"}, err
 	}
 
 	for _, item := range reqList.Items {
 		if item.Status.Phase != RequestCompleted {
-			operationrequestlog.Info("there is a request not completed, can not create new request", "name", item.Name, "phase", item.Status.Phase)
-			return errors.New("there is a request not completed, can not create new request")
+			operationrequestlog.Info(
+				"there is a request not completed, can not create new request",
+				"name",
+				item.Name,
+				"phase",
+				item.Status.Phase,
+			)
+			message := "there is a request not completed, can not create new request"
+			return admission.Warnings{message}, errors.New(message)
 		}
 	}
-	return nil
+	return admission.Warnings{}, nil
 }
 
-func (r ReqValidator) ValidateUpdate(_ context.Context, oldObj, newObj runtime.Object) error {
-	// todo check request, _ := admission.RequestFromContext(ctx), request.UserInfo.Username if legal
-	oldReq, ok := oldObj.(*Operationrequest)
-	if !ok {
-		return errors.New("obj convert Operationrequest error")
-	}
-	newReq, ok := newObj.(*Operationrequest)
-	if !ok {
-		return errors.New("obj convert Operationrequest error")
-	}
+func (r ReqValidator) ValidateUpdate(
+	_ context.Context,
+	oldReq, newReq *Operationrequest,
+) (admission.Warnings, error) {
+	// todo check request, _ := admission.RequestFromContext(ctx), request.UserInfo.Username if
+	// legal
 	if oldReq.Spec != newReq.Spec {
-		return errors.New("operation request spec do not support update")
+		message := "operation request spec do not support update"
+		return admission.Warnings{message}, errors.New(message)
 	}
-	return nil
+	return admission.Warnings{}, nil
 }
 
-func (r ReqValidator) ValidateDelete(_ context.Context, _ runtime.Object) error {
-	return nil
+func (r ReqValidator) ValidateDelete(
+	_ context.Context,
+	_ *Operationrequest,
+) (admission.Warnings, error) {
+	return admission.Warnings{}, nil
 }

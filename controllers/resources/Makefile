@@ -56,26 +56,27 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) --arch=amd64 use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
+test: ## Run tests.
+	go test -race ./... -count=1
 
 ##@ Build
 
 .PHONY: build
 build: ## Build manager binary.
-	CGO_ENABLED=0 GOOS=linux go build $(shell [ -n "${CRYPTOKEY}"  ] && echo "-ldflags '-X github.com/labring/sealos/controllers/pkg/crypto.encryptionKey=${CRYPTOKEY} -X github.com/labring/sealos/controllers/pkg/database.cryptoKey=${CRYPTOKEY}'") -o bin/manager main.go
+	LD_FLAGS="-s -w" && CGO_ENABLED=0 GOOS=linux go build -ldflags "$${LD_FLAGS}" -trimpath -o bin/manager main.go
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
 	go run ./main.go
 
 .PHONY: docker-build
-docker-build: test ## Build docker image with the manager.
-	docker build -t ${IMG} .
+docker-build: build
+	mv bin/manager bin/controller-resources-${TARGETARCH}
+	docker build -t $(IMG) . --build-arg TARGETARCH=${TARGETARCH}
 
 .PHONY: docker-push
-docker-push: ## Push docker image with the manager.
-	docker push ${IMG}
+docker-push: docker-build
+	docker push $(IMG)
 
 ##@ Deployment
 

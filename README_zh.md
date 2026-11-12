@@ -1,9 +1,9 @@
 <h2 align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./docs/4.0/img/sealos-left-dark.png" />
-  <source media="(prefers-color-scheme: light)" srcset="./docs/4.0/img/sealos-left.png" />
-  <img src="./docs/4.0/img/sealos-left.png" />
+  <source media="(prefers-color-scheme: dark)" srcset="./docs/img/sealos-left-dark.png" />
+  <source media="(prefers-color-scheme: light)" srcset="./docs/img/sealos-left.png" />
+  <img src="./docs/img/sealos-left.png" />
 </picture>
 
 一款以 Kubernetes 为内核的云操作系统发行版
@@ -26,7 +26,11 @@
 
 </div>
 
-https://github.com/labring/sealos/assets/82700206/b1f8a25a-55cf-4d15-a47b-38cf7d507134
+
+
+https://github.com/user-attachments/assets/8418437c-51ff-42b0-9195-38d1017c8522
+
+
 
 <p align="center">
   <a href="https://sealos.run/docs/Intro">文档</a> |
@@ -48,7 +52,7 @@ Sealos 是一款以 Kubernetes 为内核的**云操作系统发行版**。它以
 * [在 Sealos 上 运行低代码平台](https://sealos.run/docs/category/low-code-platform)
 * [在 Sealos 上 运行搭建聊天应用](https://sealos.run/docs/examples/social-communication/install-tailchat)
 
-![](/docs/4.0/img/sealos-desktop-zh.webp)
+![](/docs/img/sealos-desktop-zh.webp)
 
 🔍 您可以通过以下的屏幕截图进一步了解 Sealos，关于 Sealos 更为详细的介绍与说明，请参阅 [什么是 Sealos](https://sealos.run/docs/Intro)。
 
@@ -56,9 +60,9 @@ Sealos 是一款以 Kubernetes 为内核的**云操作系统发行版**。它以
 
 | 模板市场 | 应用管理 |
 | :---: | :---: |
-| ![](/docs/4.0/img/templates-zh.jpg) | ![](/docs/4.0/img/app-launchpad-1-zh.jpg) |
+| ![](/docs/img/templates-zh.jpg) | ![](/docs/img/app-launchpad-1-zh.jpg) |
 | 数据库管理 | 函数计算 |
-| ![](/docs/4.0/img/database-zh.jpg) | ![](/docs/4.0/img/laf-zh.jpg) |
+| ![](/docs/img/database-zh.jpg) | ![](/docs/img/laf-zh.jpg) |
 
 </div>
 
@@ -85,7 +89,7 @@ Sealos 是一款以 Kubernetes 为内核的**云操作系统发行版**。它以
 
 - 💬 加入我们的 [Discord服务器](https://discord.gg/qzBmGGZGk7)，与 Sealos 开发者和终端用户进行交流。这是了解 Sealos 和 Kubernetes 以及提问和分享经验的理想之地。
 
-- 🐦 在 [Twitter](https://twitter.com/sealosio) 上关注我们。
+- 🐦 在 [Twitter](https://twitter.com/Sealos_io) 上关注我们。
 
 - 🐞 请将任何 Sealos 的 Bug、问题和需求提交到 [GitHub Issue](https://github.com/labring/sealos/issues/new/choose)。
 
@@ -105,6 +109,16 @@ Sealos 维护了一个[公开的发展路线图](https://github.com/orgs/labring
 
 - [Laf](https://github.com/labring/laf) 是 Sealos 上的一款函数计算应用，让写代码像写博客一样简单，随时随地发布上线。
 - [Buildah](https://github.com/containers/buildah) 在 Sealos 4.0 中，我们广泛地利用了 Buildah 的能力，以确保集群镜像与 OCI 标准兼容。
+
+## 📄 许可证
+
+Sealos 采用 [Sealos 可持续使用许可证](./LICENSE.md)，这是一个定制许可证，允许：
+- ✅ 内部商业用途和个人非商业用途
+- ❌ 向第三方提供云服务
+
+**这不是标准的开源许可证** - 使用前请查看 [完整许可证条款](./LICENSE.md)。
+
+**贡献代码**: 通过贡献代码，您同意我们的 [贡献者许可协议](./CONTRIBUTOR_LICENSE_AGREEMENT.md) 和许可证变更条款。
 
 <!-- ## License -->
 

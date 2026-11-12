@@ -1,7 +1,23 @@
 import { v4 } from 'uuid';
 import { API_NAME } from './constants';
-import { AppMessageType, AppSendMessageType, MasterReplyMessageType, SessionV1 } from './types';
+import type {
+  HostConfig,
+  AppMessageType,
+  AppSendMessageType,
+  MasterReplyMessageType,
+  OpenAppOptions,
+  SessionV1,
+  WorkspaceQuotaItem
+} from './types';
 import { isBrowser } from './utils';
+
+export type { OpenAppOptions, WindowSize } from './types';
+
+const windowSizeMap = {
+  maximized: 'maximize',
+  windowed: 'maxmin',
+  minimized: 'minimize'
+} as const;
 
 class ClientSDK {
   private readonly eventBus = new Map<string, (e?: any) => any>();
@@ -59,7 +75,8 @@ class ClientSDK {
       data
     };
 
-    window.top?.postMessage(sendMessage, this.desktopOrigin);
+    // Apps are direct children of Desktop. If Desktop is embedded, top belongs to the host page.
+    window.parent?.postMessage(sendMessage, this.desktopOrigin);
 
     return cb;
   }
@@ -104,6 +121,14 @@ class ClientSDK {
     return this.sendMessageToMaster(API_NAME.GET_LANGUAGE);
   }
 
+  getWorkspaceQuota(): Promise<{ quota: WorkspaceQuotaItem[] }> {
+    return this.sendMessageToMaster(API_NAME.GET_WORKSPACE_QUOTA);
+  }
+
+  getHostConfig(): Promise<HostConfig> {
+    return this.sendMessageToMaster(API_NAME.GET_HOST_CONFIG);
+  }
+
   /**
    * run master EventBus
    */
@@ -111,6 +136,15 @@ class ClientSDK {
     return this.sendMessageToMaster(API_NAME.EVENT_BUS, {
       eventName,
       eventData
+    });
+  }
+
+  openApp(options: OpenAppOptions) {
+    const { pathname = '/', appSize, ...eventData } = options;
+    return this.runEvents('openDesktopApp', {
+      pathname,
+      ...eventData,
+      ...(appSize ? { appSize: windowSizeMap[appSize] } : {})
     });
   }
 
@@ -155,6 +189,9 @@ class ClientSDK {
   }
 }
 
+/**
+ * @deprecated - You really should not use sealosApp directly anymore. We will migrate to a React Context based approach in the near future.
+ */
 export let sealosApp: ClientSDK;
 
 export const createSealosApp = () => {

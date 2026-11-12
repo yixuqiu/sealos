@@ -17,67 +17,145 @@ limitations under the License.
 package v1
 
 import (
-	"k8s.io/apimachinery/pkg/runtime"
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/labring/sealos/controllers/user/pkg/licensegate"
+	"github.com/labring/sealos/controllers/user/pkg/reserved"
+	"github.com/labring/sealos/controllers/user/pkg/usercount"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 )
 
 // log is for logging in this package.
-var userlog = logf.Log.WithName("user-resource")
+var (
+	userlog          = logf.Log.WithName("user-webhook")
+	userWebhookCount *usercount.Counter
+)
 
-func (r *User) SetupWebhookWithManager(mgr ctrl.Manager) error {
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(r).
+const (
+	licenseLimitErrorCode   = 40301
+	userCountLimitErrorCode = 40302
+)
+
+// validateReservedUserName rejects User names that collide with identities
+// already deployed in the user-system namespace. Every User mints tokens for
+// the ServiceAccount user-system/<User.Name>, so such a collision would leak
+// that identity's privileges to the User holder. The error message is
+// deliberately terse: details about the collision and the configurable
+// blocklist belong to operator docs, not to API consumers.
+func validateReservedUserName(name string) error {
+	if reserved.IsReserved(name) {
+		return fmt.Errorf("user name %q is reserved", name)
+	}
+	return nil
+}
+
+func buildLicenseLimitErrorMessage() string {
+	return fmt.Sprintf(
+		"{\"code\":%d,\"message\":\"license inactive: user limit reached\"}",
+		licenseLimitErrorCode,
+	)
+}
+
+func buildUserCountLimitErrorMessage() string {
+	return fmt.Sprintf(
+		"{\"code\":%d,\"message\":\"license active: user limit reached\"}",
+		userCountLimitErrorCode,
+	)
+}
+
+func (r *User) SetupWebhookWithManager(
+	mgr ctrl.Manager,
+	userCounter *usercount.Counter,
+) error {
+	if userCounter == nil {
+		return errors.New("user webhook count cache is not initialized")
+	}
+	userWebhookCount = userCounter
+	return ctrl.NewWebhookManagedBy(mgr, r).
+		WithDefaulter(r).
+		WithValidator(r).
 		Complete()
 }
 
 // TODO(user): EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 
-//+kubebuilder:webhook:path=/mutate-user-sealos-io-v1-user,mutating=true,failurePolicy=fail,sideEffects=None,groups=user.sealos.io,resources=users,verbs=create;update,versions=v1,name=muser.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/mutate-user-sealos-io-v1-user,mutating=true,failurePolicy=fail,sideEffects=None,groups=user.sealos.io,resources=users,verbs=create;update,versions=v1,name=muser.kb.io,admissionReviewVersions=v1
 
-var _ webhook.Defaulter = &User{}
+var _ admission.Defaulter[*User] = &User{}
 
-// Default implements webhook.Defaulter so a webhook will be registered for the type
-func (r *User) Default() {
-	userlog.Info("default", "name", r.Name)
-	r.ObjectMeta = initAnnotationAndLabels(r.ObjectMeta)
-	if r.Spec.CSRExpirationSeconds == 0 {
-		r.Spec.CSRExpirationSeconds = 7200
+// Default implements admission.Defaulter so a webhook will be registered for the type
+func (r *User) Default(ctx context.Context, user *User) error {
+	userlog.Info("default", "name", user.Name)
+	user.ObjectMeta = initAnnotationAndLabels(user.ObjectMeta)
+	if user.Spec.CSRExpirationSeconds == 0 {
+		user.Spec.CSRExpirationSeconds = DefaultCSRExpirationSeconds
 	}
-	if r.Annotations[UserAnnotationDisplayKey] == "" {
-		r.Annotations[UserAnnotationDisplayKey] = r.Name
+	if user.Annotations[UserAnnotationDisplayKey] == "" {
+		user.Annotations[UserAnnotationDisplayKey] = user.Name
 	}
-	if r.Annotations[UserAnnotationOwnerKey] == "" {
-		r.Annotations[UserAnnotationOwnerKey] = r.Name
+	if user.Annotations[UserAnnotationOwnerKey] == "" {
+		user.Annotations[UserAnnotationOwnerKey] = user.Name
 	}
-}
-
-// TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
-//+kubebuilder:webhook:path=/validate-user-sealos-io-v1-user,mutating=false,failurePolicy=fail,sideEffects=None,groups=user.sealos.io,resources=users,verbs=create;update,versions=v1,name=vuser.kb.io,admissionReviewVersions=v1
-
-var _ webhook.Validator = &User{}
-
-// ValidateCreate implements webhook.Validator so a webhook will be registered for the type
-func (r *User) ValidateCreate() error {
-	userlog.Info("validate create", "name", r.Name)
-	if err := r.validateCSRExpirationSeconds(); err != nil {
-		return err
-	}
-	return validateAnnotationKeyNotEmpty(r.ObjectMeta, UserAnnotationDisplayKey)
-}
-
-// ValidateUpdate implements webhook.Validator so a webhook will be registered for the type
-func (r *User) ValidateUpdate(_ runtime.Object) error {
-	userlog.Info("validate update", "name", r.Name)
-	if err := r.validateCSRExpirationSeconds(); err != nil {
-		return err
-	}
-	return validateAnnotationKeyNotEmpty(r.ObjectMeta, UserAnnotationDisplayKey)
-}
-
-// ValidateDelete implements webhook.Validator so a webhook will be registered for the type
-func (r *User) ValidateDelete() error {
-	userlog.Info("validate delete", "name", r.Name)
 	return nil
+}
+
+// TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion
+// validation.
+// +kubebuilder:webhook:path=/validate-user-sealos-io-v1-user,mutating=false,failurePolicy=fail,sideEffects=None,groups=user.sealos.io,resources=users,verbs=create;update,versions=v1,name=vuser.kb.io,admissionReviewVersions=v1,timeoutSeconds=30
+
+var _ admission.Validator[*User] = &User{}
+
+// ValidateCreate implements admission.Validator so a webhook will be registered for the type
+func (r *User) ValidateCreate(ctx context.Context, user *User) (admission.Warnings, error) {
+	userlog.Info("validate create", "name", user.Name)
+	if err := user.validateCSRExpirationSeconds(); err != nil {
+		return admission.Warnings{}, err
+	}
+	if err := validateReservedUserName(user.Name); err != nil {
+		return admission.Warnings{}, err
+	}
+	if userWebhookCount == nil || !userWebhookCount.Initialized() {
+		return admission.Warnings{}, errors.New("user count cache is not initialized")
+	}
+	currentCount := userWebhookCount.Count()
+	if !licensegate.AllowNewUser(currentCount) {
+		message := buildLicenseLimitErrorMessage()
+		if licensegate.HasActiveLicense() {
+			message = buildUserCountLimitErrorMessage()
+		}
+		warnings := admission.Warnings{message}
+		return warnings, errors.New(message)
+	}
+	return admission.Warnings{}, validateAnnotationKeyNotEmpty(
+		user.ObjectMeta,
+		UserAnnotationDisplayKey,
+	)
+}
+
+// ValidateUpdate implements admission.Validator so a webhook will be registered for the type
+func (r *User) ValidateUpdate(
+	ctx context.Context,
+	_, user *User,
+) (admission.Warnings, error) {
+	userlog.Info("validate update", "name", user.Name)
+	if err := user.validateCSRExpirationSeconds(); err != nil {
+		return admission.Warnings{}, err
+	}
+	return admission.Warnings{}, validateAnnotationKeyNotEmpty(
+		user.ObjectMeta,
+		UserAnnotationDisplayKey,
+	)
+}
+
+// ValidateDelete implements admission.Validator so a webhook will be registered for the type
+func (r *User) ValidateDelete(ctx context.Context, user *User) (admission.Warnings, error) {
+	userlog.Info("validate delete", "name", user.Name)
+	return admission.Warnings{}, validateAnnotationKeyNotEmpty(
+		user.ObjectMeta,
+		UserAnnotationDisplayKey,
+	)
 }

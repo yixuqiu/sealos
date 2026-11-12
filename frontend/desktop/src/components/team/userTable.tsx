@@ -12,31 +12,45 @@ import {
   Th,
   Thead,
   Tr,
-  Flex
+  Flex,
+  Link
 } from '@chakra-ui/react';
-import { vaildManage } from '@/utils/tools';
+import { roleToUserRole, vaildManage } from '@/utils/tools';
 import RemoveMember from './RemoveMember';
 import Abdication from './Abdication';
 import ModifyRole from './ModifyRole';
-import { useTranslation } from 'react-i18next';
+import { useTranslation } from 'next-i18next';
+import { PencilLine } from 'lucide-react';
+import { SetAlias } from './SetAlias';
+import { useState } from 'react';
 
 export default function UserTable({
   users = [],
-  isTeam,
   ns_uid,
-  nsid
+  nsid,
+  canAbdicate
 }: {
   users: TeamUserDto[];
-  isTeam: boolean;
   ns_uid: string;
   nsid: string;
+  canAbdicate: boolean;
 }) {
   const { t } = useTranslation();
-  const headList = [t('User Name'), t('Access'), t('In Time'), t('Status'), t('Operating')];
-  const status = [t('Waiting'), t('Added')];
+
+  const [aliasDialogOpen, setAliasDialogOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<TeamUserDto | null>(null);
+
+  const headList = [
+    t('common:user_name'),
+    t('common:access'),
+    t('common:in_time'),
+    t('common:status'),
+    t('common:operating')
+  ];
+  const status = [t('common:waiting'), t('common:added')];
   const session = useSessionStore((s) => s.session);
-  const userCrUid = session?.user.userCrUid;
-  const k8s_username = session?.user.k8s_username;
+  const userCrUid = session?.user?.userCrUid;
+  const k8s_username = session?.user?.k8s_username;
   const userSelf = users.find(
     (user) => user.crUid === userCrUid && user.k8s_username === k8s_username
   );
@@ -74,17 +88,72 @@ export default function UserTable({
           {users.map((user) => (
             <Tr key={user.k8s_username}>
               <Td color={'#24282C'} py="5px">
-                <Flex>
+                <Flex alignItems={'center'}>
                   <Image
                     alt="avatar"
                     src={user.avatarUrl}
                     fallbackSrc={'/logo.svg'}
-                    w="20px"
-                    h="20px"
+                    w="24px"
+                    h="24px"
                     mr="8px"
                     borderRadius={'50%'}
                   />
-                  <Text fontWeight={'600'}>{user.nickname}</Text>
+                  <Flex flexDir={'column'}>
+                    <Text fontWeight={'600'} textOverflow={'ellipsis'} lineHeight={1.35}>
+                      {user.nickname}
+                    </Text>
+
+                    {user.alias && (
+                      <Text
+                        color={'gray.400'}
+                        lineHeight={1.25}
+                        display={'flex'}
+                        alignItems={'center'}
+                      >
+                        <span>{user.alias}</span>
+
+                        {/* Owner can set alias */}
+                        {[UserRole.Owner, UserRole.Manager].includes(userSelf.role) && (
+                          <Link
+                            onClick={() => {
+                              setSelectedUser(user);
+                              setAliasDialogOpen(true);
+                            }}
+                            color={'gray.400'}
+                            display={'inline'}
+                            opacity={'0'}
+                            marginLeft={'4px'}
+                            _hover={{
+                              opacity: '1'
+                            }}
+                          >
+                            <PencilLine size={12} />
+                          </Link>
+                        )}
+                      </Text>
+                    )}
+                  </Flex>
+                  {[UserRole.Owner, UserRole.Manager].includes(userSelf.role) && (
+                    <Link
+                      onClick={() => {
+                        setSelectedUser(user);
+                        setAliasDialogOpen(true);
+                      }}
+                      color={'gray.400'}
+                      display={'flex'}
+                      opacity={'0'}
+                      alignItems={'center'}
+                      gap={'4px'}
+                      justifySelf={'flex-end'}
+                      marginLeft={'4px'}
+                      _hover={{
+                        opacity: '1'
+                      }}
+                    >
+                      <PencilLine size={16} />
+                      <span>{t('common:user_table_set_alias')}</span>
+                    </Link>
+                  )}
                 </Flex>
               </Td>
               <Td color={'#24282C'} fontWeight={'600'} py="5px">
@@ -108,27 +177,35 @@ export default function UserTable({
                 {status[user.status]}
               </Td>
               <Td py="5px">
-                {isTeam &&
-                  (userCrUid &&
-                  canManage(user.role, user.crUid === userCrUid) &&
-                  otherWorkspaceUsers.length !== 0 ? (
-                    user.role === UserRole.Owner ? (
+                {userCrUid &&
+                canManage(user.role, user.crUid === userCrUid) &&
+                otherWorkspaceUsers.length !== 0 ? (
+                  user.role === UserRole.Owner ? (
+                    canAbdicate ? (
                       <Abdication ns_uid={ns_uid} users={otherWorkspaceUsers} />
-                    ) : userCrUid !== user.uid ? (
-                      <RemoveMember
-                        nsid={nsid}
-                        ns_uid={ns_uid}
-                        status={user.status}
-                        k8s_username={user.k8s_username}
-                        targetUserCrUid={user.crUid}
-                      />
                     ) : null
-                  ) : null)}
+                  ) : userCrUid !== user.uid ? (
+                    <RemoveMember
+                      nsid={nsid}
+                      ns_uid={ns_uid}
+                      status={user.status}
+                      k8s_username={user.k8s_username}
+                      targetUserCrUid={user.crUid}
+                    />
+                  ) : null
+                ) : null}
               </Td>
             </Tr>
           ))}
         </Tbody>
       </Table>
+
+      <SetAlias
+        targetTeamUser={selectedUser}
+        open={aliasDialogOpen}
+        onOpenChange={setAliasDialogOpen}
+        nsUid={ns_uid}
+      />
     </TableContainer>
   ) : (
     <></>

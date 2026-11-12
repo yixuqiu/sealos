@@ -12,7 +12,6 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 ```c
 .
-├── Dockerfile
 ├── Makefile
 ├── README.md
 ├── deploy
@@ -128,8 +127,8 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
     "next-pwa": "^5.6.0",
     "nprogress": "^0.2.0",
     "qrcode.react": "^3.1.0",
-    "react": "18.2.0",
-    "react-dom": "18.2.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
     "react-draggable": "^4.4.5",
     "react-i18next": "^12.2.0",
     "sass": "^1.62.0",
@@ -155,6 +154,12 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 3. src/layout/index.tsx
 4. src/components/desktop_content.tsx
 
+### 安装 App 数据流
+
+- `src/pages/api/desktop/getInstalledApps.ts` 负责组装桌面可见 App 列表。共享 App 来自 `app-system` namespace 的 `app.sealos.io/v1 App`，workspace App 来自当前 workspace namespace。
+- 共享 App 保持 `displayType` 分组顺序 `normal -> more -> hidden`，组内按 `spec.position` 从小到大排序；没有 `position` 的旧数据按 `0` 处理，再按创建时间倒序和 key 稳定排序。
+- `spec.position` 由管理端共享 App 图标管理写入，集群 App CRD 需要先包含 `spec.position` schema；workspace App 管理不写这个字段。
+
 ### 测试环境
 
 1. 需要设置环境变量`NODE_ENV=test` 或者 `$env:NODE_ENV="test"`
@@ -164,7 +169,7 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 1. 获取登录凭证: 由于 login 页面不是在 desktop 项目里，所以需要从线上 sealos 获取登录凭证到本地开发: <https://cloud.sealos.io/> 。复制 storage 里的 session 到 localhost 环境实现 mock 登录。
 
-2. Chakra ui <https://chakra-ui.com/getting-started>
+2. Chakra ui <https://v2.chakra-ui.com/getting-started>
 
 3. TanStack Query 用法：<https://cangsdarm.github.io/react-query-web-i18n/react>
 

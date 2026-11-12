@@ -1,26 +1,26 @@
+import { deleteTeamRequest } from '@/api/namespace';
+import { useCustomToast } from '@/hooks/useCustomToast';
+import useSessionStore from '@/stores/session';
+import { ApiResp } from '@/types';
 import {
   Button,
-  Image,
+  ButtonProps,
   Modal,
   ModalBody,
   ModalCloseButton,
   ModalContent,
   ModalHeader,
   ModalOverlay,
-  useDisclosure,
-  Text,
   Spinner,
-  ButtonProps
+  Text,
+  useDisclosure
 } from '@chakra-ui/react';
-import CustomInput from './Input';
-import { useState } from 'react';
-import { useCustomToast } from '@/hooks/useCustomToast';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { deleteTeamRequest } from '@/api/namespace';
-import useSessionStore from '@/stores/session';
-import { ApiResp } from '@/types';
-import { useTranslation } from 'react-i18next';
 import { DeleteIcon } from '@sealos/ui';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useTranslation } from 'next-i18next';
+import { useState } from 'react';
+import CustomInput from './Input';
+import { track } from '@sealos/gtm';
 export default function DissolveTeam({
   nsid,
   ns_uid,
@@ -44,6 +44,9 @@ export default function DissolveTeam({
         queryKey: ['teamList'],
         exact: false
       });
+      track('workspace_delete', {
+        module: 'workspace'
+      });
       onSuccess && onSuccess(ns_uid);
       onClose();
     },
@@ -56,7 +59,7 @@ export default function DissolveTeam({
   const submit = () => {
     if (teamName.trim() !== nsid)
       return toast({
-        title: t('Invaild Name of Team')
+        title: t('common:invaild_name_of_team')
       });
     mutation.mutate({ ns_uid });
   };
@@ -76,13 +79,13 @@ export default function DissolveTeam({
         onClick={() => {
           if (session?.user?.ns_uid === ns_uid) {
             return toast({
-              title: t('Invaild Context')
+              title: t('common:invaild_context')
             });
           }
           onOpen();
         }}
       >
-        {t('Dissolve Team')}
+        {t('common:dissolve_team')}
       </Button>
       <Modal isOpen={isOpen} onClose={onClose} isCentered>
         <ModalOverlay />
@@ -95,20 +98,20 @@ export default function DissolveTeam({
         >
           <ModalCloseButton right={'24px'} top="16px" p="0" />
           <ModalHeader bg={'white'} border={'none'} p="0">
-            Warning
+            {t('common:warning')}
           </ModalHeader>
           {mutation.isLoading ? (
             <Spinner mx="auto" />
           ) : (
             <ModalBody h="100%" w="100%" p="0" mt="22px">
-              <Text>{t('Dissovle Tips')}</Text>
-              <Text>{t(`Enter Confirm.`, { value: nsid })}</Text>
+              <Text>{t('common:dissovle_tips')}</Text>
+              <Text>{t(`common:enter_confirm`, { value: nsid })}</Text>
               <CustomInput
                 onChange={(e) => {
                   e.preventDefault();
                   setTeamName(e.target.value);
                 }}
-                placeholder={t('Name of Team') || ''}
+                placeholder={t('common:team') || '' + ' ID'}
                 value={teamName}
               />
               <Button
@@ -128,7 +131,7 @@ export default function DissolveTeam({
                   submit();
                 }}
               >
-                {t('Confirm')}
+                {t('common:confirm')}
               </Button>
             </ModalBody>
           )}

@@ -1,5 +1,12 @@
-import { KubeConfig } from '@kubernetes/client-node';
-import { APPTYPE, displayType } from './app';
+import { APPTYPE, TAppMenuData, TForcedIconStyle, displayType } from './app';
+import { LicenseFrontendKey } from '@/constants/account';
+
+export const ForcedIconStyleAnnotation =
+  'app.sealos.io/representative-meta.forced-icon-style' as const;
+
+export type TAppRepresentativeAnnotations = {
+  [ForcedIconStyleAnnotation]?: TForcedIconStyle;
+} & Record<string, string | undefined>;
 
 export type CRDMeta = {
   group: string; // group
@@ -13,6 +20,7 @@ export const userCRD = {
   Version: 'v1',
   Resource: 'users'
 };
+
 export type UserCR = {
   apiVersion: 'user.sealos.io/v1';
   kind: 'User';
@@ -62,11 +70,12 @@ export type StatusCR = {
   };
   code: 404;
 };
+
 export type TAppCR = {
   apiVersion: 'app.sealos.io/v1';
   kind: 'App';
   metadata: {
-    annotations: any;
+    annotations?: TAppRepresentativeAnnotations;
     creationTimestamp: string;
     generation: number;
     labels: Record<string, string>;
@@ -80,12 +89,9 @@ export type TAppCR = {
     displayType: displayType;
     i18n: Record<'zh' | 'zh-Hans', { name: string }>;
     icon: string;
-    menuData?: {
-      nameColor: string;
-      helpDropDown: boolean;
-      helpDocs: boolean | string;
-    };
+    menuData?: TAppMenuData[];
     name: string;
+    position?: number;
     type: APPTYPE;
   };
 };
@@ -97,28 +103,70 @@ export type TAppCRList = {
   metadata: { continue: string; resourceVersion: string };
 };
 
-export type NotificationItem = {
+export type NotificationCR = {
   metadata: {
     creationTimestamp: string;
     labels: {
-      isRead: string;
+      isRead?: string;
+      [LicenseFrontendKey]?: string;
     };
     name: string;
     namespace: string;
     uid: string;
   };
   spec: {
-    from: string;
+    from?: string;
     message: string;
     timestamp: number;
     title: string;
     desktopPopup?: boolean;
+    startTime?: string;
+    endTime?: string;
     i18ns?: {
       zh?: {
-        from: string;
+        from?: string;
         message: string;
         title: string;
       };
     };
   };
+};
+
+export type TNotification = {
+  uid: string;
+  name: string;
+  namespace: string;
+  creationTimestamp: string;
+  isRead: boolean;
+  licenseFrontend?: string;
+  timestamp: number;
+  desktopPopup: boolean;
+  startTime?: string;
+  endTime?: string;
+  from?:
+    | string
+    | 'Debt-System'
+    | 'Active-System'
+    /**
+     * The one above the app grid
+     */
+    | 'Desktop-Announcement'
+    /**
+     * The one above the nav bar
+     */
+    | 'Desktop-Alert';
+  i18n: {
+    [key in string]: {
+      from?: string;
+      message: string;
+      title: string;
+    };
+  };
+};
+
+export const AccountMeta: CRDMeta = {
+  group: 'account.sealos.io',
+  version: 'v1',
+  namespace: 'sealos-system',
+  plural: 'accounts'
 };

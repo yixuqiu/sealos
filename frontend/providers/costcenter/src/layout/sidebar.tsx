@@ -1,99 +1,92 @@
-import { Flex, Text, Img } from '@chakra-ui/react';
-import { useRouter } from 'next/router';
-import bar_a_icon from '@/assert/bar_chart_4_bars_black.svg';
-import bar_icon from '@/assert/bar_chart_4_bars.svg';
-import letter_icon from '@/assert/format_letter_spacing_standard.svg';
-import letter_a_icon from '@/assert/format_letter_spacing_standard_black.svg';
-import receipt_icon from '@/assert/receipt_long.svg';
-import receipt_a_icon from '@/assert/receipt_long_black.svg';
-import invoice_icon from '@/assert/invoice.svg';
-import invoice_a_icon from '@/assert/invoice-active.svg';
-import type { StaticImageData } from 'next/image';
+import { Calculator, ChartPie, Dock, ReceiptText, LucideIcon, TicketMinus } from 'lucide-react';
+import { useClientAppConfig } from '@/hooks/useClientAppConfig';
+import { Button } from '@sealos/shadcn-ui/button';
 import { useTranslation } from 'next-i18next';
-import useEnvStore from '@/stores/env';
+import Link from 'next/link';
+import { useRouter } from 'next/router';
 
 type Menu = {
   id: string;
   url: string;
   value: string;
-  icon: StaticImageData;
-  aicon: StaticImageData;
+  icon: LucideIcon;
   display: boolean;
 };
 
 export default function SideBar() {
   const router = useRouter();
   const { t, ready } = useTranslation();
-  const invoiceEnabled = useEnvStore((state) => state.invoiceEnabled);
+  const config = useClientAppConfig();
+
   const menus: Menu[] = [
     {
-      id: 'CostOverview',
-      url: '/cost_overview',
-      value: 'SideBar.CostOverview',
-      icon: bar_icon,
-      aicon: bar_a_icon,
-      display: true
+      id: 'Cost',
+      url: '/cost',
+      value: 'sidebar.cost',
+      icon: Dock,
+      display: !config.features.subscriptionEnabled
     },
     {
-      id: 'BillingDetails',
+      id: 'Plan',
+      url: '/plan',
+      value: 'sidebar.plan',
+      icon: Dock,
+      display: config.features.subscriptionEnabled
+    },
+    {
+      id: 'Billing',
       url: '/billing',
-      value: 'SideBar.BillingDetails',
-      icon: receipt_icon,
-      aicon: receipt_a_icon,
+      value: 'sidebar.billing',
+      icon: ReceiptText,
       display: true
     },
     {
-      id: 'ValuationStandard',
-      url: '/valuation',
-      value: 'SideBar.ValuationStandard',
-      icon: letter_icon,
-      aicon: letter_a_icon,
-      display: true
-    },
-    {
-      id: 'CreateInvoice',
+      id: 'Invoice',
       url: '/create_invoice',
-      value: 'SideBar.CreateInvoice',
-      icon: invoice_icon,
-      aicon: invoice_a_icon,
-      display: invoiceEnabled
+      value: 'sidebar.invoice',
+      icon: TicketMinus,
+      display: config.invoice.enabled
+    },
+    {
+      id: 'Usage',
+      url: '/usage',
+      value: 'sidebar.usage',
+      icon: ChartPie,
+      display: true
+    },
+    {
+      id: 'Pricing Standard',
+      url: '/valuation',
+      value: 'sidebar.valuation',
+      icon: Calculator,
+      display: true
     }
   ];
+
   return (
-    <Flex flexDirection="column">
+    <nav className="flex flex-col gap-1">
       {ready &&
         menus
           .filter((item) => item.display)
           .map((item) => {
             return (
-              <Flex
-                key={item.value}
-                py={'10px'}
-                px={['10px', '10px', '10px', '20px']}
-                alignItems={'center'}
-                onClick={() => {
-                  router.push(item.url);
-                }}
-                as="button"
+              <Button
+                variant="ghost"
+                className="data-[is-current-page=true]:bg-zinc-100 data-[is-current-page=true]:font-medium font-normal rounded-lg text-sm flex justify-start py-5 px-4"
+                asChild
+                key={item.id}
+                data-is-current-page={router.route === item.url}
               >
-                <Flex h={4} alignItems={'center'}>
-                  <Img
-                    src={router.route == item.url ? item.aicon.src : item.icon.src}
-                    width={'18px'}
-                    alt="icon of module"
+                <Link href={item.url} className="flex items-center gap-2">
+                  <item.icon
+                    size={16}
+                    className={router.route === item.url ? 'text-zinc-900' : 'text-zinc-600'}
                   />
-                </Flex>
-                <Text
-                  color={router.route === item.url ? '#000000' : '#7B838B'}
-                  ml="10px"
-                  my="9px"
-                  display={['none', 'none', 'none', 'flex']}
-                >
-                  {t(item.value)}
-                </Text>
-              </Flex>
+                  <span className="leading-normal">{t(item.value)}</span>
+                </Link>
+              </Button>
             );
           })}
-    </Flex>
+    </nav>
   );
 }

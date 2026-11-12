@@ -25,6 +25,7 @@ import { useCustomToast } from '@/hooks/useCustomToast';
 import { ApiResp } from '@/types';
 import { useTranslation } from 'next-i18next';
 import { ExchangeIcon, ExpanMoreIcon } from '@sealos/ui';
+import { useConfigStore } from '@/stores/config';
 
 export default function Abdication({
   ns_uid,
@@ -34,6 +35,7 @@ export default function Abdication({
   users: TeamUserDto[];
   ns_uid: string;
 } & ButtonProps) {
+  const logo = useConfigStore().layoutConfig?.logo;
   const { t } = useTranslation();
   const { onOpen, isOpen, onClose } = useDisclosure();
   const queryClient = useQueryClient();
@@ -79,7 +81,7 @@ export default function Abdication({
         {...props}
       >
         <ExchangeIcon boxSize="16px" mr="4px" />
-        <Text fontSize={'12px'}>{t('Abdication')}</Text>
+        <Text fontSize={'12px'}>{t('common:abdication')}</Text>
       </Button>
       <Modal isOpen={isOpen} onClose={onClose} isCentered>
         <ModalOverlay />
@@ -92,7 +94,7 @@ export default function Abdication({
         >
           <ModalCloseButton right={'24px'} top="16px" p="0" />
           <ModalHeader bg={'white'} border={'none'} p="0">
-            {t('Abdication')}
+            {t('common:abdication')}
           </ModalHeader>
           {mutation.isLoading ? (
             <Spinner mx="auto" />
@@ -113,7 +115,7 @@ export default function Abdication({
                     <Image
                       alt="avatar"
                       src={targetUser.avatar}
-                      fallbackSrc={'/logo.svg'}
+                      fallbackSrc={logo || '/logo.svg'}
                       boxSize={'24px'}
                       borderRadius={'50%'}
                       mr="8px"
@@ -141,7 +143,7 @@ export default function Abdication({
                       <Image
                         alt="logo"
                         src={user.avatarUrl}
-                        fallbackSrc={'/logo.svg'}
+                        fallbackSrc={logo || '/logo.svg'}
                         boxSize={'24px'}
                         borderRadius={'50%'}
                         mr="8px"
@@ -168,7 +170,7 @@ export default function Abdication({
                   submit();
                 }}
               >
-                {t('Confirm')}
+                {t('common:confirm')}
               </Button>
             </ModalBody>
           )}

@@ -6,7 +6,7 @@ import { strongPassword } from '@/utils/crypto';
 import { globalPrisma } from '@/services/backend/db/init';
 import { signUpByPassword } from '@/services/backend/globalAuth';
 import { getRegionToken } from '@/services/backend/regionAuth';
-import { verifyJWT } from '@/services/backend/auth';
+import { verifyRegionalJwt } from '@/services/backend/auth';
 import { ProviderType } from 'prisma/global/generated/client';
 import { AccessTokenPayload } from '@/types/token';
 
@@ -45,7 +45,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       id: username,
       password,
       avatar_url: '',
-      name: username
+      name: username,
+      // API signup: mark the source explicitly and read no invite context (API
+      // accounts never participate in referral rewards)
+      registration: { source: 'API' }
     });
     if (!globalData) throw new Error('Failed to edit db');
     const realUser = globalData.user;
@@ -55,7 +58,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         code: 401,
         message: 'Unauthorized'
       });
-    const regionUser = (await verifyJWT<AccessTokenPayload>(data.token))!;
+    const regionUser = (await verifyRegionalJwt<AccessTokenPayload>(data.token))!;
     return jsonRes<ApiSession>(res, {
       data: {
         user: {

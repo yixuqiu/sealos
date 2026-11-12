@@ -1,121 +1,201 @@
 # Sealos Desktop SDK
 
-## 本地调试
+> 🚀 专为 iframe 微前端架构设计的安全、高效通信解决方案
 
-1. 全局安装 yalc
+## 🌟 特性
+
+- ✅ **类型安全**：完整的 TypeScript 支持，减少运行时错误
+- 🔒 **安全可靠**：多层安全验证，支持域名白名单
+- 🚀 **Promise 化**：异步操作同步化，提升开发体验
+- 🎯 **双向通信**：内置事件系统，支持复杂交互场景
+- ⚡ **轻量高效**：< 10KB gzipped，异步非阻塞设计
+- 🔧 **易于扩展**：插件化架构，支持自定义 API
+
+## 📦 安装
 
 ```bash
-npm i -g yalc
-npm i -g nodemon
+# 使用 npm
+npm install @zjy365/sealos-desktop-sdk
+
+# 使用 pnpm
+pnpm add @zjy365/sealos-desktop-sdk
+
+# 使用 yarn
+yarn add @zjy365/sealos-desktop-sdk
 ```
 
-2. 在 client-sdk 项目目录下执行:
+## 🚀 快速开始
+
+### Desktop 端（主应用）
+
+```typescript
+import { createMasterAPP } from '@zjy365/sealos-desktop-sdk/master';
+
+useEffect(() => {
+  // 配置允许的域名（生产环境建议使用具体域名）
+  const cleanup = createMasterAPP(['https://app.example.com']);
+
+  return cleanup; // 组件卸载时清理
+}, []);
+```
+
+### App 端（子应用）
+
+```typescript
+import { createSealosApp, sealosApp } from '@zjy365/sealos-desktop-sdk';
+
+useEffect(() => {
+  // 初始化 SDK
+  const cleanup = createSealosApp();
+
+  return cleanup;
+}, []);
+
+// 获取用户信息
+const getUserInfo = async () => {
+  try {
+    const session = await sealosApp.getSession();
+    console.log('用户信息:', session.user);
+  } catch (error) {
+    console.error('获取用户信息失败:', error);
+  }
+};
+
+// 获取语言设置
+const getLanguage = async () => {
+  const { lng } = await sealosApp.getLanguage();
+  console.log('当前语言:', lng);
+};
+```
+
+## 📚 核心 API
+
+### 用户信息
+
+```typescript
+// 获取用户会话信息
+const session = await sealosApp.getSession();
+console.log(session.user.name); // 用户名
+console.log(session.user.id); // 用户ID
+```
+
+### 语言设置
+
+```typescript
+// 获取当前语言设置
+const { lng } = await sealosApp.getLanguage();
+// lng: 'zh' | 'en' | 其他语言代码
+```
+
+### 打开 Desktop 应用
+
+```typescript
+// 以 desktop 小窗口打开应用
+await sealosApp.openApp({
+  appKey: 'system-costcenter',
+  appSize: 'windowed'
+});
+
+// 打开应用时传递路由、查询参数和消息数据
+await sealosApp.openApp({
+  appKey: 'system-template',
+  pathname: '/instance',
+  query: { instanceName: 'demo' },
+  messageData: { source: 'my-app' },
+  appSize: 'maximized'
+});
+```
+
+### 事件通信
+
+```typescript
+// 子应用监听主应用事件
+const unsubscribe = sealosApp.addAppEventListen('user-update', (userData) => {
+  console.log('用户信息已更新:', userData);
+});
+
+// 子应用向主应用发送事件
+await sealosApp.runEvents('app-ready', { appId: 'my-app' });
+
+// 清理事件监听器
+unsubscribe();
+```
+
+## 🏗️ 通信原理
+
+```mermaid
+graph LR
+    A[子应用 App] -->|postMessage| B[主应用 Desktop]
+    B -->|postMessage| A
+    A -->|uuid 标识| B
+    B -->|相同 uuid 回复| A
+```
+
+1. **初始化**：主应用和子应用分别初始化对应的 SDK
+2. **请求**：子应用生成唯一 ID，通过 postMessage 发送请求
+3. **处理**：主应用验证来源，处理业务逻辑
+4. **响应**：主应用带着相同 ID 回复结果
+5. **回调**：子应用根据 ID 匹配回调，完成异步调用
+
+## 🔧 开发指南
+
+### 本地调试
 
 ```bash
+# 1. 安装开发工具
+npm i -g yalc nodemon
+
+# 2. 启动开发模式
 npm run dev
-```
 
-3. 在 front 项目或者 APP 项目 link 本地 SDK：
-
-```bash
-## 连接本地包
-rm -rf node_modules/sealos-desktop-sdk && yalc link sealos-desktop-sdk
-
-## 断开连接
-yalc remove --all && pnpm install sealos-desktop-sdk
-
-## 已经集成了指令：
+# 3. 链接到本地项目
 npm run link-sdk
+
+# 4. 断开链接
 npm run unlink-sdk
 ```
 
-4. 重启 front 项目或者 APP 项目
+### 扩展 API
 
-5. 开发 SDK ，保存后自动重新构建。结束后，需要手动执行断开连接
+1. 在 `constants/api.ts` 中添加新的 API 名称
+2. 在 `src/master.ts` 中实现对应的处理方法
+3. 在 `src/app.ts` 中添加客户端调用方法
 
-## 安装远程包
+### 安全配置
 
-```bash
-pnpm i sealos-desktop-sdk
+```typescript
+// 生产环境推荐配置
+const allowedOrigins = ['https://your-app-domain.com', 'https://another-app.com'];
+
+createMasterAPP(allowedOrigins);
 ```
 
-## 使用教程
+## 📖 API 参考
 
-sealos-desktop-sdk 分为 Master 和 APP ，除了 Desktop 项目使用 Master 外，其他项目只需要使用 APP 的内容。  
-sealos-desktop-sdk 封装了一套基于 postMessage 的 Iframe 和基座的通信方法，APP 中可以同步的写法去调用基座的方法。  
-不管是 Master 还是 APP，都需要在一个入口文件执行一次初始化，挂载 listener，这意味着必须在 Browser 环境中运行。
+| API                           | 参数               | 返回值                   | 说明              |
+| ----------------------------- | ------------------ | ------------------------ | ----------------- |
+| `getSession()`                | -                  | `Promise<SessionV1>`     | 获取用户会话信息  |
+| `getLanguage()`               | -                  | `Promise<{lng: string}>` | 获取语言设置      |
+| `openApp(options)`            | `OpenAppOptions`   | `Promise<any>`           | 打开 desktop 应用 |
+| `runEvents(name, data)`       | `string, any`      | `Promise<any>`           | 触发主应用事件    |
+| `addAppEventListen(name, fn)` | `string, function` | `function`               | 监听主应用事件    |
 
-```js
-// Desktop 项目中
-import { createMasterAPP } from 'sealos-desktop-sdk/master';
+## 🤝 贡献
 
-...
+欢迎提交 Issue 和 Pull Request！
 
-useEffect(() => {
-  return createMasterAPP({
-    session
-  });
-}, [session]);
+## 📄 许可证
 
-...
+[Sealos Sustainable Use License 1.0](https://github.com/labring/sealos/blob/main/LICENSE.md)
 
+### 宿主货币配置（0.1.24）
 
-// APP 项目中
-import { createSealosApp } from "sealos-desktop-sdk";
+`sealosApp.getHostConfig()` 新增可选顶层字段
+`currencySymbol?: 'shellCoin' | 'cny' | 'usd'`，共用根入口导出的 `HostConfig` 类型。
+原有 `cloud`、`features.subscription`、`features.analytics` 保持不变。
+新 Desktop 从 `desktop.layout.currencySymbol` 读取；等待配置加载完成后，缺失值才
+兜底为 `shellCoin`。等待超过 8 秒时请求失败，调用方应重试，不应缓存加载失败的兜底值。
+旧 Desktop 可能不返回该字段，调用方可使用 `config.currencySymbol ?? 'shellCoin'`。
+SDK 不缓存宿主配置，字段仅表示展示符号，不进行汇率换算。
 
-...
-
-useEffect(() => {
-  return createSealosApp({
-    appKey: "sealos-app-sdk-demo",
-  });
-}, []);
-
-...
-```
-
-## 开发说明
-
-SDK 设计文档: [SDK Design](https://doc.weixin.qq.com/doc/w3_Aa0APAbqAE0qKaX1SKeSeOTK2Rr88?scode=AIgAzwcKAEIHXk0OZLAa0APAbqAE0)
-
-### 增加测试 APP
-
-在 frontend 项目中：src/mock/installedApps.ts 中追加 APP，类型选择 Iframe ，地址暂填本地。
-
-<br/>
-
-### 增加 API
-
-1. 增加 constants/app.ts 中枚举的值。
-2. 在 src/app.ts 中增加对应的执行方法。
-
-<br/>
-
-### Desktop 和 APP 之间的通信说明
-
-Desktop 容器通过 Iframe 挂载 APP，两者之间通过 PostMessage 进行单向通信。SDK 分为 Master SDK 和 APP SDK。
-
-Master SDK 放到了 Desktop 项目中运行，APP 开发者不需要关心 Master SDK 的内容。
-
-APP SDK 中，封装了和 Master SDK 通信的方法，可以直接通过 await \*\*\*() 的形式，同步的书写对应业务代码。
-
-**交互逻辑说明:**
-
-1. Desktop 中调用 Master SDK 进行初始化。给 window 对象挂载 message 监听方法。
-2. APP 中调用 APP SDK 进行初始化。给 window 对象挂载监听来自 Desktop 的回调消息。
-3. APP 中调用 APP SDK 的方法，会触发一条 postMessage 信息给 Desktop。
-   1. 给每条发送的消息一个 uuid，方便接收回调。
-   2. APP SDK 有一个消息 Map ，发送消息时，会给 Map 添加一个 key 为消息 id，value 为对应响应方法。
-   3. 通过 postMessage 发送消息给 Desktop。
-   4. Desktop 根据消息执行对应的方法，并把结果再次通过 postMessage 回传给 APP。
-   5. APP 根据回传消息中的 id，执行 Map 中的响应方法。完成整个请求。
-
-<br/>
-
-## APP SDK 相关 API
-
-| API         | Request             | Response          | Description             |
-| ----------- | ------------------- | ----------------- | ----------------------- |
-| init        | null                | {connected: true} | 初始化与 Desktop 的链接 |
-| getUserInfo | null                | Session Data      | 获取用户的 session 数据 |
-| request     | { method,url,body } | any               | 发送一个 http 请求      |
+源码、候选包名及发布步骤见 [RELEASING.md](./RELEASING.md)。本地候选版本不表示已经发布。

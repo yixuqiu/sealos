@@ -26,9 +26,8 @@ type Data struct {
 }
 
 type MenuData struct {
-	NameColor    string `json:"nameColor,omitempty"`
-	HelpDropDown bool   `json:"helpDropDown,omitempty"`
-	HelpDocs     string `json:"helpDocs,omitempty"`
+	Name string `json:"name,omitempty"`
+	Link string `json:"link,omitempty"`
 }
 
 type DisplayType string
@@ -50,8 +49,8 @@ type AppMeta struct {
 	//+kubebuilder:validation:Optional
 	DisplayType DisplayType `json:"displayType,omitempty"`
 
-	Data     Data     `json:"data,omitempty"`
-	MenuData MenuData `json:"menuData,omitempty"`
+	Data     Data       `json:"data,omitempty"`
+	MenuData []MenuData `json:"menuData,omitempty"`
 }
 
 // AppSpec defines the desired state of App
@@ -59,12 +58,17 @@ type AppSpec struct {
 	AppMeta `json:",inline"`
 
 	//+kubebuilder:validation:Optional
+	Position float64 `json:"position,omitempty"`
+
+	//+kubebuilder:validation:Optional
+	Version string `json:"version,omitempty"`
+
+	//+kubebuilder:validation:Optional
 	I18N *map[string]AppMeta `json:"i18n,omitempty"`
 }
 
 // AppStatus defines the observed state of App
-type AppStatus struct {
-}
+type AppStatus struct{}
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
@@ -85,8 +89,4 @@ type AppList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []App `json:"items"`
-}
-
-func init() {
-	SchemeBuilder.Register(&App{}, &AppList{})
 }

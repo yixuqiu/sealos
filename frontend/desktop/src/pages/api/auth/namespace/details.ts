@@ -17,7 +17,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const queryResult = await prisma.userWorkspace.findMany({
       where: {
         workspaceUid: ns_uid,
-        isPrivate: false
+        status: 'IN_WORKSPACE'
       },
       include: {
         workspace: true,
@@ -45,21 +45,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       role: roleToUserRole(selfItem.role),
       createTime: workspace.createdAt,
       teamName: workspace.displayName,
-      nstype: NSType.Team
+      nstype: workspace.id === 'ns-' + payload.userCrName ? NSType.Private : NSType.Team
     };
-    const users = queryResult.map<TeamUserDto>((x) => {
-      const user = userResult.find((user) => user.uid === x.userCr.userUid)!;
-      return {
-        uid: x.userCr.userUid,
-        crUid: x.userCrUid,
-        k8s_username: x.userCr.crName,
-        avatarUrl: user.avatarUri,
-        nickname: user.nickname,
-        createdTime: x.userCr.createdAt.toString(),
-        joinTime: x.joinAt || undefined,
-        role: roleToUserRole(x.role),
-        status: joinStatusToNStatus(x.status)
-      };
+    const users = queryResult.flatMap<TeamUserDto>((x) => {
+      const user = userResult.find((user) => user.uid === x.userCr.userUid);
+      // when the user is deleting
+      if (!user) return [];
+      return [
+        {
+          uid: x.userCr.userUid,
+          crUid: x.userCrUid,
+          k8s_username: x.userCr.crName,
+          avatarUrl: user.avatarUri,
+          nickname: user.nickname,
+          createdTime: x.userCr.createdAt.toString(),
+          joinTime: x.joinAt || undefined,
+          role: roleToUserRole(x.role),
+          status: joinStatusToNStatus(x.status),
+          alias: x.alias ?? undefined
+        }
+      ];
     });
     jsonRes(res, {
       code: 200,

@@ -20,6 +20,15 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+type I18nData struct {
+	Title       string `json:"title,omitempty"`
+	URL         string `json:"url,omitempty"`
+	GitRepo     string `json:"gitRepo,omitempty"`
+	Description string `json:"description,omitempty"`
+	Readme      string `json:"readme,omitempty"`
+	Icon        string `json:"icon,omitempty"`
+}
+
 type TemplateType string
 
 const (
@@ -57,29 +66,31 @@ type InputData struct {
 type Inputs map[string]InputData
 
 type TemplateData struct {
-	Title        string       `json:"title"`
-	URL          string       `json:"url,omitempty"`
-	GitRepo      string       `json:"gitRepo,omitempty"`
-	Author       string       `json:"author,omitempty"`
-	Description  string       `json:"description,omitempty"`
-	Readme       string       `json:"readme,omitempty"`
-	Icon         string       `json:"icon,omitempty"`
-	TemplateType TemplateType `json:"templateType"`
-	Draft        bool         `json:"draft,omitempty"`
-	Categories   []string     `json:"categories,omitempty"`
-	Defaults     Defaults     `json:"defaults,omitempty"`
-	Inputs       Inputs       `json:"inputs,omitempty"`
+	Title        string              `json:"title"`
+	URL          string              `json:"url,omitempty"`
+	GitRepo      string              `json:"gitRepo,omitempty"`
+	Author       string              `json:"author,omitempty"`
+	Description  string              `json:"description,omitempty"`
+	Readme       string              `json:"readme,omitempty"`
+	Icon         string              `json:"icon,omitempty"`
+	TemplateType TemplateType        `json:"templateType"`
+	Locale       string              `json:"locale,omitempty"`
+	I18n         map[string]I18nData `json:"i18n,omitempty"`
+	Draft        bool                `json:"draft,omitempty"`
+	Categories   []string            `json:"categories,omitempty"`
+	Defaults     Defaults            `json:"defaults,omitempty"`
+	Inputs       Inputs              `json:"inputs,omitempty"`
 }
 
 // TemplateSpec defines the desired state of Template
-// +kubebuilder:validation:XValidation:rule="'app_name' in self.defaults",message="defaults must have app_name key"
+// +kubebuilder:validation:XValidation:rule="'app_name' in self.defaults",message="defaults must
+// have app_name key"
 type TemplateSpec struct {
 	TemplateData `json:",inline"`
 }
 
 // TemplateStatus defines the observed state of Template
-type TemplateStatus struct {
-}
+type TemplateStatus struct{}
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
@@ -100,8 +111,4 @@ type TemplateList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []Template `json:"items"`
-}
-
-func init() {
-	SchemeBuilder.Register(&Template{}, &TemplateList{})
 }

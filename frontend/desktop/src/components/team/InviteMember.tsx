@@ -26,9 +26,11 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getInviteCodeRequest, inviteMemberRequest } from '@/api/namespace';
 import { vaildManage } from '@/utils/tools';
 import { ApiResp } from '@/types';
-import { useTranslation } from 'react-i18next';
+import { useTranslation } from 'next-i18next';
 import { GroupAddIcon } from '@sealos/ui';
 import { useCopyData } from '@/hooks/useCopyData';
+import { track } from '@sealos/gtm';
+import { needsClipboardWorkaround } from '@/utils/browserDetect';
 
 export default function InviteMember({
   ns_uid,
@@ -42,9 +44,9 @@ export default function InviteMember({
 }) {
   const { onOpen, isOpen, onClose } = useDisclosure();
   const session = useSessionStore((s) => s.session);
-  const k8s_username = session?.user.k8s_username;
-  const [userId, setUserId] = useState('');
   const [role, setRole] = useState(UserRole.Developer);
+  const [inviteLink, setInviteLink] = useState<string>('');
+  const [isFallbackMode, setIsFallbackMode] = useState(false);
   const toast = useToast();
   const queryClient = useQueryClient();
   const mutation = useMutation({
@@ -67,11 +69,17 @@ export default function InviteMember({
   const { copyData } = useCopyData();
   const getLinkCode = useMutation({
     mutationFn: getInviteCodeRequest,
-    mutationKey: [session?.user.ns_uid],
+    mutationKey: [session?.user?.ns_uid],
+    onSuccess(_data, variables) {
+      track('workspace_invite', {
+        module: 'workspace',
+        invite_role: variables.role === UserRole.Developer ? 'developer' : 'manager'
+      });
+    },
     onError() {
       toast({
         status: 'error',
-        title: t('Failed to generate invitation link'),
+        title: t('common:failed_to_generate_invitation_link'),
         isClosable: true,
         position: 'top'
       });
@@ -81,16 +89,49 @@ export default function InviteMember({
   const generateLink = (code: string) => {
     return window.location.origin + encodeURI(`/WorkspaceInvite/?code=${code}`);
   };
+
   const handleGenLink: MouseEventHandler<HTMLButtonElement> = async (e) => {
     e.preventDefault();
+
+    // Get the invitation link first
     const data = await getLinkCode.mutateAsync({
       ns_uid,
       role
     });
     const code = data.data?.code!;
     const link = generateLink(code);
-    await copyData(link);
+
+    // Check if browser needs workaround (Safari/iOS)
+    if (needsClipboardWorkaround()) {
+      // Safari: Show link and separate copy button
+      setInviteLink(link);
+      setIsFallbackMode(true);
+      return;
+    }
+
+    // Other browsers: Try to copy directly
+    try {
+      await copyData(link, t('v2:invite_link_copied'));
+      setIsFallbackMode(false);
+    } catch (error) {
+      // If copy fails, fall back to showing the link
+      console.warn('Direct copy failed, showing link for manual copy', error);
+      setInviteLink(link);
+      setIsFallbackMode(true);
+    }
   };
+
+  const handleCopyLink: MouseEventHandler<HTMLButtonElement> = async (e) => {
+    e.preventDefault();
+    await copyData(inviteLink, t('v2:invite_link_copied'));
+  };
+
+  const handleClose = () => {
+    setInviteLink('');
+    setIsFallbackMode(false);
+    onClose();
+  };
+
   return (
     <>
       {[UserRole.Manager, UserRole.Owner].includes(ownRole) ? (
@@ -102,12 +143,12 @@ export default function InviteMember({
           leftIcon={<GroupAddIcon boxSize={'16px'} />}
           onClick={onOpen}
         >
-          {t('Invite Member')}
+          {t('common:invite_member')}
         </Button>
       ) : (
         <></>
       )}
-      <Modal isOpen={isOpen} onClose={onClose} isCentered>
+      <Modal isOpen={isOpen} onClose={handleClose} isCentered>
         <ModalOverlay />
         <ModalContent
           borderRadius={'4px'}
@@ -118,14 +159,14 @@ export default function InviteMember({
         >
           <ModalCloseButton right={'24px'} top="16px" p="0" />
           <ModalHeader bg={'white'} border={'none'} p="0">
-            {t('Invite Member')}
+            {t('common:invite_member')}
           </ModalHeader>
           {mutation.isLoading ? (
             <Spinner mx="auto" />
           ) : (
             <ModalBody h="100%" w="100%" p="0" mt="22px">
               <Text>
-                {t('Invite members to workspace', {
+                {t('common:invite_members_to_workspace', {
                   workspace: workspaceName
                 })}
               </Text>
@@ -148,6 +189,7 @@ export default function InviteMember({
                         w="16px"
                         h="16px"
                         transform={'rotate(90deg)'}
+                        alt="expand more"
                       />
                     </Flex>
                   </MenuButton>
@@ -158,6 +200,8 @@ export default function InviteMember({
                         onClick={(e) => {
                           e.preventDefault();
                           setRole(idx);
+                          setInviteLink(''); // Clear link when role changes
+                          setIsFallbackMode(false);
                         }}
                         key={idx}
                       >
@@ -181,9 +225,36 @@ export default function InviteMember({
                   isDisabled={getLinkCode.isLoading}
                   onClick={handleGenLink}
                 >
-                  {t('Generate invitation link')}
+                  {inviteLink && isFallbackMode
+                    ? t('common:regenerate_link')
+                    : t('common:generate_invitation_link')}
                 </Button>
               </HStack>
+              {inviteLink && isFallbackMode && (
+                <Flex
+                  mt="16px"
+                  p="12px"
+                  borderRadius="4px"
+                  border="1px solid #DEE0E2"
+                  bgColor="#FBFBFC"
+                  gap="8px"
+                  alignItems="center"
+                >
+                  <Text
+                    flex="1"
+                    fontSize="sm"
+                    color="#5A646E"
+                    overflow="hidden"
+                    textOverflow="ellipsis"
+                    whiteSpace="nowrap"
+                  >
+                    {inviteLink}
+                  </Text>
+                  <Button size="sm" variant="outline" onClick={handleCopyLink} flexShrink={0}>
+                    {t('common:copy')}
+                  </Button>
+                </Flex>
+              )}
             </ModalBody>
           )}
         </ModalContent>

@@ -19,228 +19,54 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/labring/sealos/controllers/pkg/resources"
-
-	"github.com/dustin/go-humanize"
-	"sigs.k8s.io/yaml"
-
+	"github.com/labring/sealos/controllers/pkg/types"
 	"go.mongodb.org/mongo-driver/mongo"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	accountv1 "github.com/labring/sealos/controllers/account/api/v1"
 )
 
-func TestMongoDB_QueryBillingRecords(t *testing.T) {
-	dbCTX := context.Background()
+var testTime = time.Date(2023, time.May, 9, 5, 0, 0, 0, time.UTC)
 
-	m, err := NewMongoInterface(dbCTX, os.Getenv("MONGODB_URI"))
+func TestGenerateBillingDataPreservesTypedGroupKey(t *testing.T) {
+	start := time.Date(2026, time.July, 29, 1, 0, 0, 0, time.UTC)
+	end := start.Add(time.Hour)
+	properties := resources.NewPropertyTypeLS([]resources.PropertyType{
+		{
+			Name: "cpu", Enum: 0, PriceType: resources.AVG, UnitPrice: 1,
+		},
+	})
+	records := []resources.Monitor{
+		{
+			Time: start, Category: "ns-owner", Type: 1,
+			ParentType: 255, ParentName: "parent/name", Name: "child",
+			Used: resources.EnumUsedMap{0: 60},
+		},
+	}
+
+	billings, err := GenerateBillingDataFromRecords(
+		records, properties, start, end, "owner",
+	)
 	if err != nil {
-		t.Errorf("failed to connect mongo: error = %v", err)
+		t.Fatal(err)
 	}
-	defer func() {
-		if err = m.Disconnect(dbCTX); err != nil {
-			t.Errorf("failed to disconnect mongo: error = %v", err)
-		}
-	}()
-
-	testTime := time.Date(2021, 1, 1, 0, 0, 0, 0, time.Local)
-	startTime, endTime := metav1.Time{Time: testTime}, metav1.Time{Time: testTime.Add(3 * humanize.Day)}
-	// page 1 pageSize 1 type -1
-	query1 := &accountv1.BillingRecordQuery{
-		Spec: accountv1.BillingRecordQuerySpec{
-			StartTime: startTime,
-			EndTime:   endTime,
-			Page:      1,
-			PageSize:  1,
-			//OrderID:   "random_order_id_1",
-			OrderID: "",
-			Type:    -1,
-		},
+	if len(billings) != 1 {
+		t.Fatalf("billing count = %d, want 1", len(billings))
 	}
-	// page 1 pageSize 5 type 1
-	query2 := &accountv1.BillingRecordQuery{
-		Spec: accountv1.BillingRecordQuerySpec{
-			StartTime: startTime,
-			EndTime:   endTime,
-			Page:      1,
-			PageSize:  5,
-			//OrderID:   "random_order_id_1",
-			OrderID: "",
-			Type:    1,
-		},
-	}
-	// page 1 pageSize 5 type 0
-	query3 := &accountv1.BillingRecordQuery{
-		Spec: accountv1.BillingRecordQuerySpec{
-			StartTime: startTime,
-			EndTime:   endTime,
-			Page:      1,
-			PageSize:  5,
-			//OrderID:   "random_order_id_1",
-			OrderID: "",
-			Type:    0,
-		},
-	}
-	// only orderID
-
-	query4 := &accountv1.BillingRecordQuery{
-		Spec: accountv1.BillingRecordQuerySpec{
-			OrderID: "random_order_id_recharge19",
-		},
-	}
-
-	query5 := &accountv1.BillingRecordQuery{
-		Spec: accountv1.BillingRecordQuerySpec{
-			StartTime: startTime,
-			EndTime:   endTime,
-			Page:      2,
-			PageSize:  5,
-			Namespace: "ns-vd1k1dk3",
-			Type:      1,
-		},
-	}
-
-	billingRecordQueryList := []*accountv1.BillingRecordQuery{
-		query1, query2, query3, query4, query5,
-	}
-	for _, billingRecordQuery := range billingRecordQueryList {
-		err = m.QueryBillingRecords(billingRecordQuery, "vd1k1dk3")
-		if err != nil {
-			t.Errorf("failed to query billing records: error = %v", err)
-		}
-		data, err := yaml.Marshal(billingRecordQuery)
-		if err != nil {
-			t.Errorf("failed to marshal billingRecordQuery: error = %v", err)
-		}
-		t.Logf("billingRecordQuery: %s\n", string(data))
-	}
-}
-
-func TestMongoDB_QueryBillingRecords1(t *testing.T) {
-	dbCTX := context.Background()
-	m, err := NewMongoInterface(dbCTX, os.Getenv("MONGODB_URI"))
-	if err != nil {
-		t.Errorf("failed to connect mongo: error = %v", err)
-	}
-	defer func() {
-		if err = m.Disconnect(dbCTX); err != nil {
-			t.Errorf("failed to disconnect mongo: error = %v", err)
-		}
-	}()
-	//now := time.Now().UTC()
-	billquery := &accountv1.BillingRecordQuery{
-		Spec: accountv1.BillingRecordQuerySpec{
-			StartTime: metav1.Time{Time: time.Now().UTC().Add(-time.Hour * 24 * 30)},
-			EndTime:   metav1.Time{Time: time.Now().UTC().Add(time.Hour * 24 * 30)},
-			Page:      1,
-			PageSize:  5,
-			Type:      1,
-		},
-	}
-	err = m.QueryBillingRecords(billquery, "")
-	if err != nil {
-		t.Errorf("failed to query billing records: error = %v", err)
-	}
-	data, err := yaml.Marshal(billquery)
-	if err != nil {
-		t.Errorf("failed to marshal billingRecordQuery: error = %v", err)
-	}
-	t.Logf("billingRecordQuery: %s\n", string(data))
-}
-
-var testTime = time.Date(2023, 5, 9, 5, 0, 0, 0, time.UTC)
-
-func TestMongoDB_QueryBillingRecords2(t *testing.T) {
-	dbCTX := context.Background()
-
-	os.Setenv("MONGODB_URI", "mongodb://root:lv4nfcgz@127.0.0.1:64110/sealos-resources?authSource=admin&directConnection=true")
-	m, err := NewMongoInterface(dbCTX, os.Getenv("MONGODB_URI"))
-	if err != nil {
-		t.Errorf("failed to connect mongo: error = %v", err)
-	}
-	defer func() {
-		if err = m.Disconnect(dbCTX); err != nil {
-			t.Errorf("failed to disconnect mongo: error = %v", err)
-		}
-	}()
-	now := time.Now().UTC()
-	testTime := time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), 0, 0, 0, time.Local).UTC()
-	startTime, endTime := metav1.Time{Time: testTime}, metav1.Time{Time: testTime.Add(3 * humanize.Day)}
-	// page 1 pageSize 1 type -1
-	query1 := &accountv1.BillingRecordQuery{
-		Spec: accountv1.BillingRecordQuerySpec{
-			StartTime: startTime,
-			EndTime:   endTime,
-			Page:      1,
-			PageSize:  15,
-			//OrderID:   "random_order_id_1",
-			OrderID: "",
-			Type:    -1,
-		},
-	}
-	//// page 1 pageSize 5 type 1
-	//query2 := &accountv1.BillingRecordQuery{
-	//	Spec: accountv1.BillingRecordQuerySpec{
-	//		StartTime: startTime,
-	//		EndTime:   endTime,
-	//		Page:      1,
-	//		PageSize:  5,
-	//		//OrderID:   "random_order_id_1",
-	//		OrderID: "",
-	//		Type:    1,
-	//	},
-	//}
-	//// page 1 pageSize 5 type 0
-	//query3 := &accountv1.BillingRecordQuery{
-	//	Spec: accountv1.BillingRecordQuerySpec{
-	//		StartTime: startTime,
-	//		EndTime:   endTime,
-	//		Page:      1,
-	//		PageSize:  5,
-	//		//OrderID:   "random_order_id_1",
-	//		OrderID: "",
-	//		Type:    0,
-	//	},
-	//}
-	//// only orderID
-	//
-	//query4 := &accountv1.BillingRecordQuery{
-	//	Spec: accountv1.BillingRecordQuerySpec{
-	//		OrderID: "random_order_id_recharge19",
-	//	},
-	//}
-	//
-	//query5 := &accountv1.BillingRecordQuery{
-	//	Spec: accountv1.BillingRecordQuerySpec{
-	//		StartTime: startTime,
-	//		EndTime:   endTime,
-	//		Page:      2,
-	//		PageSize:  5,
-	//		Namespace: "ns-vd1k1dk3",
-	//		Type:      1,
-	//	},
-	//}
-
-	billingRecordQueryList := []*accountv1.BillingRecordQuery{
-		query1, /*query2, query3, query4, query5,*/
-	}
-	for _, billingRecordQuery := range billingRecordQueryList {
-		err = m.QueryBillingRecords(billingRecordQuery, "1jc12uh6")
-		if err != nil {
-			t.Errorf("failed to query billing records: error = %v", err)
-		}
-		data, err := yaml.Marshal(billingRecordQuery)
-		if err != nil {
-			t.Errorf("failed to marshal billingRecordQuery: error = %v", err)
-		}
-		t.Logf("billingRecordQuery: %s\n", string(data))
+	if billings[0].AppType != 255 || billings[0].AppName != "parent/name" {
+		t.Fatalf(
+			"billing group = (%d, %q), want (255, %q)",
+			billings[0].AppType,
+			billings[0].AppName,
+			"parent/name",
+		)
 	}
 }
 
 func TestMongoDB_SaveBillingsWithAccountBalance(t *testing.T) {
+	requireMongoTest(t)
 	type fields struct {
 		URL          string
 		Client       *mongo.Client
@@ -257,7 +83,7 @@ func TestMongoDB_SaveBillingsWithAccountBalance(t *testing.T) {
 	numRecords := 10
 	accountBalanceSpecs := make([]*resources.Billing, numRecords+10)
 
-	for i := 0; i < numRecords; i++ {
+	for i := range numRecords {
 		accountBalanceSpecs[i] = &resources.Billing{
 			Time:      testTime,
 			OrderID:   fmt.Sprintf("random_order_id_%d", i+1),
@@ -302,7 +128,10 @@ func TestMongoDB_SaveBillingsWithAccountBalance(t *testing.T) {
 			args    args
 			wantErr bool
 		}{
-			name:    fmt.Sprintf("Test case %d: Save deduction record with owner 'ns-vd1k1dk3'", i+1),
+			name: fmt.Sprintf(
+				"Test case %d: Save deduction record with owner 'ns-vd1k1dk3'",
+				i+1,
+			),
 			args:    args{accountBalanceSpec: spec},
 			wantErr: false,
 		})
@@ -457,6 +286,7 @@ func TestNewMongoInterface(t *testing.T) {
 }
 
 func TestMongoDB_GetBillingLastUpdateTime(t *testing.T) {
+	requireMongoTest(t)
 	dbCTX := context.Background()
 
 	m, err := NewMongoInterface(dbCTX, os.Getenv("MONGODB_URI"))
@@ -479,26 +309,8 @@ func TestMongoDB_GetBillingLastUpdateTime(t *testing.T) {
 	t.Logf("lastUpdateTime: %v", lastUpdateTime)
 }
 
-func TestMongoDB_GetAllPricesMap(t *testing.T) {
-	dbCTX := context.Background()
-
-	m, err := NewMongoInterface(dbCTX, os.Getenv("MONGODB_URI"))
-	if err != nil {
-		t.Errorf("failed to connect mongo: error = %v", err)
-	}
-	defer func() {
-		if err = m.Disconnect(dbCTX); err != nil {
-			t.Errorf("failed to disconnect mongo: error = %v", err)
-		}
-	}()
-	pricesMap, err := m.GetAllPricesMap()
-	if err != nil {
-		t.Fatalf("failed to get all prices map: %v", err)
-	}
-	t.Logf("pricesMap: %v", pricesMap)
-}
-
 func TestMongoDB_DropMonitorCollectionsOlderThan(t *testing.T) {
+	requireMongoTest(t)
 	dbCTX := context.Background()
 	m, err := NewMongoInterface(dbCTX, os.Getenv("MONGODB_URI"))
 	if err != nil {
@@ -515,30 +327,6 @@ func TestMongoDB_DropMonitorCollectionsOlderThan(t *testing.T) {
 	}
 }
 
-func TestMongoDB_GetBillingHistoryNamespaceList(t *testing.T) {
-	dbCTX := context.Background()
-	m, err := NewMongoInterface(dbCTX, os.Getenv("MONGODB_URI"))
-	if err != nil {
-		t.Errorf("failed to connect mongo: error = %v", err)
-	}
-	defer func() {
-		if err = m.Disconnect(dbCTX); err != nil {
-			t.Errorf("failed to disconnect mongo: error = %v", err)
-		}
-	}()
-	queryTime := time.Now().UTC()
-	billRecord := &accountv1.NamespaceBillingHistorySpec{
-		StartTime: metav1.Time{Time: queryTime.Add(-time.Hour * 24 * 30)},
-		EndTime:   metav1.Time{Time: queryTime},
-		Type:      -1,
-	}
-	namespaceList, err := m.GetBillingHistoryNamespaceList(billRecord, "")
-	if err != nil {
-		t.Fatalf("failed to get billing history namespace list: %v", err)
-	}
-	t.Logf("namespaceList: %v", namespaceList)
-}
-
 /*
 info generate billing data used {2 ns-7uyfrr47 pay-xy map[0:325 1:166 2:0]}
 
@@ -546,29 +334,9 @@ info generate billing data used {2 ns-7uyfrr47 pay-xy map[0:325 1:166 2:0]}
 	   cpu: 500m
 	   memory: 256Mi
 */
-func TestMongoDB_GenerateBillingData(t *testing.T) {
-	dbCTX := context.Background()
-
-	m, err := NewMongoInterface(dbCTX, os.Getenv("MONGODB_URI"))
-	if err != nil {
-		t.Errorf("failed to connect mongo: error = %v", err)
-	}
-	defer func() {
-		if err = m.Disconnect(dbCTX); err != nil {
-			t.Errorf("failed to disconnect mongo: error = %v", err)
-		}
-	}()
-	queryTime := time.Now().UTC()
-
-	ids, amount, err := m.GenerateBillingData(queryTime.Add(-1*time.Hour), queryTime, resources.DefaultPropertyTypeLS, []string{"ns-7uyfrr47", "ns-1jc12uh6", "ns-ezplle8l"}, "1jc12uh6")
-	if err != nil {
-		t.Fatalf("failed to generate billing data: %v", err)
-	}
-	t.Logf("generate billing data used %v", amount)
-	t.Logf("generate billing data used %v", ids)
-}
 
 func TestMongoDB_SetPropertyTypeLS(t *testing.T) {
+	requireMongoTest(t)
 	dbCTX := context.Background()
 
 	m, err := NewMongoInterface(dbCTX, os.Getenv("MONGODB_URI"))
@@ -589,13 +357,14 @@ func TestMongoDB_SetPropertyTypeLS(t *testing.T) {
 	for _, tp := range resources.DefaultPropertyTypeLS.Types {
 		t.Logf("propertyTypeLS type: %v", tp)
 	}
-	//err = m.SavePropertyTypes(resources.DefaultPropertyTypeLS.Types)
-	//if err != nil {
+	// err = m.SavePropertyTypes(resources.DefaultPropertyTypeLS.Types)
+	// if err != nil {
 	//	t.Fatalf("failed to save property types: %v", err)
 	//}
 }
 
 func Test_mongoDB_GetDistinctMonitorCombinations(t *testing.T) {
+	requireMongoTest(t)
 	dbCTX := context.Background()
 
 	m, err := NewMongoInterface(dbCTX, os.Getenv("MONGODB_URI"))
@@ -608,9 +377,222 @@ func Test_mongoDB_GetDistinctMonitorCombinations(t *testing.T) {
 		}
 	}()
 	queryTime := time.Now().UTC()
-	monitorCombinations, err := m.GetDistinctMonitorCombinations(queryTime.Add(-time.Hour), queryTime)
+	monitorCombinations, err := m.GetDistinctMonitorCombinations(
+		queryTime.Add(-time.Hour),
+		queryTime,
+	)
 	if err != nil {
 		t.Fatalf("failed to get distinct monitor combinations: %v", err)
 	}
 	t.Logf("monitorCombinations: %v", monitorCombinations)
+}
+
+func Test_mongoDB_CreateTTLTrafficTimeSeries(t *testing.T) {
+	requireMongoTest(t)
+	dbCTX := context.Background()
+
+	m, err := NewMongoInterface(dbCTX, os.Getenv("MONGODB_URI"))
+	if err != nil {
+		t.Errorf("failed to connect mongo: error = %v", err)
+	}
+	defer func() {
+		if err = m.Disconnect(dbCTX); err != nil {
+			t.Errorf("failed to disconnect mongo: error = %v", err)
+		}
+	}()
+
+	if err = m.CreateTTLTrafficTimeSeries(); err != nil {
+		t.Fatalf("failed to create TTL traffic time series: %v", err)
+	}
+	t.Logf("create TTL traffic time series success")
+}
+
+func Test_mongoDB_SaveObjTraffic(t *testing.T) {
+	requireMongoTest(t)
+	dbCTX := context.Background()
+
+	m, err := NewMongoInterface(dbCTX, os.Getenv("MONGODB_URI"))
+	if err != nil {
+		t.Errorf("failed to connect mongo: error = %v", err)
+	}
+	defer func() {
+		if err = m.Disconnect(dbCTX); err != nil {
+			t.Errorf("failed to disconnect mongo: error = %v", err)
+		}
+	}()
+	traffic := make([]*types.ObjectStorageTraffic, 0, 10)
+	for i := range 10 {
+		traffic = append(traffic, &types.ObjectStorageTraffic{
+			Time:      time.Now().UTC(),
+			User:      "user-" + strconv.Itoa(i),
+			Bucket:    "bucket-" + strconv.Itoa(i),
+			TotalSent: int64(1000 + i),
+			Sent:      int64(100 + i),
+		})
+	}
+	if err = m.SaveObjTraffic(traffic...); err != nil {
+		t.Fatalf("failed to save object storage traffic: %v", err)
+	}
+	t.Logf("save object storage traffic success")
+}
+
+func Test_mongoDB_GetAllLatestObjTraffic(t *testing.T) {
+	requireMongoTest(t)
+	dbCTX := context.Background()
+
+	m, err := NewMongoInterface(dbCTX, os.Getenv("MONGODB_URI"))
+	if err != nil {
+		t.Errorf("failed to connect mongo: error = %v", err)
+	}
+	defer func() {
+		if err = m.Disconnect(dbCTX); err != nil {
+			t.Errorf("failed to disconnect mongo: error = %v", err)
+		}
+	}()
+
+	traffic, err := m.GetAllLatestObjTraffic(time.Now().Add(-time.Hour), time.Now())
+	if err != nil {
+		t.Fatalf("failed to save object storage traffic: %v", err)
+	}
+	t.Logf("save object storage traffic success")
+	for _, tf := range traffic {
+		t.Logf("traffic: %#+v", tf)
+	}
+}
+
+func Test_mongoDB_HandlerTimeObjBucketSentTraffic(t *testing.T) {
+	requireMongoTest(t)
+	dbCTX := context.Background()
+
+	m, err := NewMongoInterface(dbCTX, os.Getenv("MONGODB_URI"))
+	if err != nil {
+		t.Errorf("failed to connect mongo: error = %v", err)
+	}
+	defer func() {
+		if err = m.Disconnect(dbCTX); err != nil {
+			t.Errorf("failed to disconnect mongo: error = %v", err)
+		}
+	}()
+
+	bytes, err := m.HandlerTimeObjBucketSentTraffic(
+		time.Now().UTC().Add(-time.Hour),
+		time.Now().UTC(),
+		"bucket-6",
+	)
+	if err != nil {
+		t.Fatalf("failed to handle time object bucket usage: %v", err)
+	}
+	t.Logf("handle time object bucket usage success: %v", bytes)
+}
+
+func Test_mongoDB_GetTimeObjBucketBucket(t *testing.T) {
+	requireMongoTest(t)
+	dbCTX := context.Background()
+
+	m, err := NewMongoInterface(dbCTX, os.Getenv("MONGODB_URI"))
+	if err != nil {
+		t.Errorf("failed to connect mongo: error = %v", err)
+	}
+	defer func() {
+		if err = m.Disconnect(dbCTX); err != nil {
+			t.Errorf("failed to disconnect mongo: error = %v", err)
+		}
+	}()
+
+	buckets, err := m.GetTimeObjBucketBucket(time.Now().UTC().Add(-10*time.Hour), time.Now().UTC())
+	if err != nil {
+		t.Fatalf("failed to get time object bucket bucket: %v", err)
+	}
+	t.Logf("get time object bucket bucket success： len: %v", len(buckets))
+	for _, bucket := range buckets {
+		t.Logf("bucket: %#+v", bucket)
+	}
+}
+
+func Test_mongoDB_GetTimeUsedOwnerList(t *testing.T) {
+	requireMongoTest(t)
+	dbCTX := context.Background()
+
+	m, err := NewMongoInterface(dbCTX, os.Getenv("MONGODB_URI"))
+	if err != nil {
+		t.Errorf("failed to connect mongo: error = %v", err)
+	}
+	defer func() {
+		if err = m.Disconnect(dbCTX); err != nil {
+			t.Errorf("failed to disconnect mongo: error = %v", err)
+		}
+	}()
+
+	owners, err := m.GetTimeUsedNamespaceList(time.Now().UTC().Add(-time.Hour), time.Now().UTC())
+	if err != nil {
+		t.Fatalf("failed to get time used owner list: %v", err)
+	}
+	t.Logf("get time used owner list success: %v", owners)
+}
+
+func Test_mongoDB_GenerateBillingData(t *testing.T) {
+	requireMongoTest(t)
+	dbCTX := context.Background()
+
+	m, err := NewMongoInterface(dbCTX, os.Getenv("MONGODB_URI"))
+	if err != nil {
+		t.Errorf("failed to connect mongo: error = %v", err)
+	}
+	defer func() {
+		if err = m.Disconnect(dbCTX); err != nil {
+			t.Errorf("failed to disconnect mongo: error = %v", err)
+		}
+	}()
+
+	prols := resources.DefaultPropertyTypeLS
+	ownerToNS := map[string][]string{
+		"ax1uut8w": {"ns-tnw80mhk", "ns-ax1uut8w"},
+	}
+	billings, err := m.GenerateBillingData(
+		time.Now().UTC().Add(-time.Hour),
+		time.Now().UTC(),
+		prols,
+		ownerToNS,
+	)
+	if err != nil {
+		t.Fatalf("failed to generate billing data: %v", err)
+	}
+	for _, billing := range billings {
+		for _, bill := range billing {
+			t.Logf("%+v\n", bill)
+		}
+	}
+}
+
+func Test_mongoDB_GetOwnersWithoutRecentUpdates(t *testing.T) {
+	requireMongoTest(t)
+	dbCTX := context.Background()
+
+	m, err := NewMongoInterface(dbCTX, os.Getenv("MONGODB_URI"))
+	if err != nil {
+		t.Errorf("failed to connect mongo: error = %v", err)
+	}
+	defer func() {
+		if err = m.Disconnect(dbCTX); err != nil {
+			t.Errorf("failed to disconnect mongo: error = %v", err)
+		}
+	}()
+	now := time.Now().UTC()
+	endHourTime := time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), 0, 0, 0, time.Local).
+		UTC()
+	owners, err := m.GetOwnersRecentUpdates([]string{"nfhmc74p"}, endHourTime)
+	if err != nil {
+		t.Fatalf("failed to get owners without recent updates: %v", err)
+	}
+	t.Logf("get owners without recent updates success: %v", owners)
+}
+
+func requireMongoTest(t *testing.T) {
+	t.Helper()
+	if os.Getenv("RUN_MONGO_TESTS") != "true" {
+		t.Skip("set RUN_MONGO_TESTS=true to run MongoDB tests")
+	}
+	if os.Getenv("MONGODB_URI") == "" {
+		t.Skip("requires MONGODB_URI")
+	}
 }

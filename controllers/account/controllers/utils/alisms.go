@@ -15,19 +15,19 @@
 package utils
 
 import (
+	"errors"
 	"fmt"
 
 	openapi "github.com/alibabacloud-go/darabonba-openapi/v2/client"
 	dysmsapi20170525 "github.com/alibabacloud-go/dysmsapi-20170525/v3/client"
 	util "github.com/alibabacloud-go/tea-utils/v2/service"
-	"github.com/alibabacloud-go/tea/tea"
 )
 
 func CreateSMSClient(ak, sk, endpoint string) (*dysmsapi20170525.Client, error) {
 	config := &openapi.Config{
-		AccessKeyId:     tea.String(ak),
-		AccessKeySecret: tea.String(sk),
-		Endpoint:        tea.String(endpoint),
+		AccessKeyId:     new(ak),
+		AccessKeySecret: new(sk),
+		Endpoint:        new(endpoint),
 	}
 	client, err := dysmsapi20170525.NewClient(config)
 	return client, err
@@ -49,4 +49,34 @@ func SendSms(client *dysmsapi20170525.Client, req *dysmsapi20170525.SendSmsReque
 		return fmt.Errorf("send sms err code %s: %s", *resp.Body.Code, *resp.Body.Message)
 	}
 	return err
+}
+
+// SendSmsMultiple sends SMS to multiple phone numbers with the same content
+func SendSmsMultiple(
+	client *dysmsapi20170525.Client,
+	phoneNumbers []string,
+	signName, templateCode, templateParam string,
+) error {
+	if len(phoneNumbers) == 0 {
+		return errors.New("phone numbers cannot be empty")
+	}
+
+	for _, phoneNumber := range phoneNumbers {
+		if phoneNumber == "" {
+			continue
+		}
+		sendSmsRequest := &dysmsapi20170525.SendSmsRequest{
+			PhoneNumbers:  new(phoneNumber),
+			SignName:      new(signName),
+			TemplateCode:  new(templateCode),
+			TemplateParam: new(templateParam),
+		}
+
+		err := SendSms(client, sendSmsRequest)
+		if err != nil {
+			return fmt.Errorf("failed to send SMS to %s: %w", phoneNumber, err)
+		}
+	}
+
+	return nil
 }

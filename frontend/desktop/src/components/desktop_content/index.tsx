@@ -1,37 +1,126 @@
+import { getHostConfig } from '@/utils/hostConfig';
+import { getWorkspaceQuota } from '@/api/platform';
 import AppWindow from '@/components/app_window';
-import MoreButton from '@/components/more_button';
-import UserMenu from '@/components/user_menu';
-import useDriver from '@/hooks/useDriver';
-import useAppStore from '@/stores/app';
-import { TApp, WindowSize } from '@/types';
-import { Box, Flex, Grid, GridItem, Image, Text } from '@chakra-ui/react';
+import useAppStore, { BRAIN_APP_KEY, SESSION_RESTORE_APP_KEY } from '@/stores/app';
+import { useConfigStore } from '@/stores/config';
+import { useDesktopConfigStore } from '@/stores/desktopConfig';
+import { WindowSize } from '@/types';
+import { Box, Flex, Image, Button, Text } from '@chakra-ui/react';
 import { useTranslation } from 'next-i18next';
 import dynamic from 'next/dynamic';
-import { MouseEvent, useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createMasterAPP, masterApp } from 'sealos-desktop-sdk/master';
+import type { InitialAppLaunchState } from '@/utils/initialAppTarget';
+import { ChakraIndicator } from './ChakraIndicator';
+// import Apps from './apps';
 import IframeWindow from './iframe_window';
-import styles from './index.module.scss';
+import styles from './index.module.css';
+import NeedToMerge from '../account/AccountCenter/mergeUser/NeedToMergeModal';
+import { useRealNameAuthNotification } from '../account/RealNameModal';
+import useSessionStore from '@/stores/session';
+import LoginModal from '@/components/LoginModal';
 import { useQuery } from '@tanstack/react-query';
-import { getGlobalNotification } from '@/api/platform';
-import { useMessage } from '@sealos/ui';
-import { BackgroundImageUrl, ImageFallBackUrl } from '@/stores/config';
-const TimeComponent = dynamic(() => import('./time'), {
-  ssr: false
-});
+import { getAmount, UserInfo } from '@/api/auth';
+import OnlineServiceButton from './serviceButton';
+import SaleBanner from '../banner';
+import { useAppDisplayConfigStore } from '@/stores/appDisplayConfig';
+import { useGuideModalStore } from '@/stores/guideModal';
+import GuideModal from '../account/GuideModal';
+import { GlobalNotification } from './GlobalNotification';
+import {
+  brainAnalyticsAttribution,
+  createBrainAnalyticsRelay,
+  isBrainAnalyticsSender
+} from '@/utils/brain-analytics';
 
-export default function DesktopContent(props: any) {
-  const { t, i18n } = useTranslation();
-  const { installedApps: apps, runningInfo, openApp, setToHighestLayerById } = useAppStore();
-  const renderApps = apps.filter((item: TApp) => item?.displayType === 'normal');
-  const [maxItems, setMaxItems] = useState(10);
-  const { message } = useMessage();
+const AppDock = dynamic(() => import('../AppDock'), { ssr: false });
+const FloatButton = dynamic(() => import('@/components/floating_button'), { ssr: false });
+const Account = dynamic(() => import('../account'), { ssr: false });
+const Apps = dynamic(() => import('./apps'), { ssr: false });
 
-  const handleDoubleClick = (e: MouseEvent<HTMLDivElement>, item: TApp) => {
-    e.preventDefault();
-    if (item?.name) {
-      openApp(item);
+export const blurBackgroundStyles = {
+  bg: 'rgba(22, 30, 40, 0.35)',
+  backdropFilter: 'blur(80px) saturate(150%)',
+  border: 'none',
+  borderRadius: '12px'
+};
+
+type DesktopProps = {
+  initialAppLaunch: InitialAppLaunchState;
+  onInitialAppLoaded: (appKey: string) => void;
+};
+
+export default function Desktop({ initialAppLaunch, onInitialAppLoaded }: DesktopProps) {
+  const { t } = useTranslation();
+  const { isAppBar } = useDesktopConfigStore();
+  const {
+    installedApps: apps,
+    runningInfo,
+    openApp,
+    setToHighestLayerById,
+    closeAppById,
+    setAutoLaunch,
+    currentAppKey
+  } = useAppStore();
+  const backgroundImage = useConfigStore().layoutConfig?.backgroundImage;
+  const { backgroundImage: desktopBackgroundImage } = useAppDisplayConfigStore();
+  const { realNameAuthNotification } = useRealNameAuthNotification();
+  const { layoutConfig, cloudConfig } = useConfigStore();
+  const { session } = useSessionStore();
+  const { isGuest, openGuestLoginModal, showGuestLoginModal, closeGuestLoginModal } =
+    useSessionStore();
+  const { commonConfig } = useConfigStore();
+  const realNameAuthNotificationIdRef = useRef<string | number | undefined>();
+  const [isClient, setIsClient] = useState(false);
+  const guideModal = useGuideModalStore();
+  const isInitialAppLoading = initialAppLaunch.status !== 'ready';
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  useEffect(() => {
+    // Do not let rehydrated, cross-tab state overwrite this tab's restore
+    // intent before the initial target has been selected and loaded.
+    if (!isClient || isInitialAppLoading) return;
+
+    if (!currentAppKey) {
+      sessionStorage.removeItem(SESSION_RESTORE_APP_KEY);
+      return;
     }
-  };
+
+    if (currentAppKey === BRAIN_APP_KEY) {
+      sessionStorage.removeItem(SESSION_RESTORE_APP_KEY);
+      return;
+    }
+
+    sessionStorage.setItem(SESSION_RESTORE_APP_KEY, currentAppKey);
+  }, [isClient, currentAppKey, isInitialAppLoading]);
+
+  // Do not keep the startup mask forever when an iframe fails to report load.
+  useEffect(() => {
+    if (initialAppLaunch.status !== 'loading') {
+      return;
+    }
+
+    const timeout = window.setTimeout(() => onInitialAppLoaded(initialAppLaunch.appKey), 10_000);
+    return () => window.clearTimeout(timeout);
+  }, [initialAppLaunch, onInitialAppLoaded]);
+
+  const infoData = useQuery({
+    queryFn: UserInfo,
+    queryKey: [session?.token, 'UserInfo'],
+    select(d) {
+      return d.data?.info;
+    }
+  });
+
+  const { data: account } = useQuery({
+    queryKey: ['getAmount', { userId: session?.user?.userCrUid }],
+    queryFn: getAmount,
+    enabled: !!session?.user,
+    staleTime: 60 * 1000
+  });
 
   /**
    * Open Desktop Application
@@ -78,125 +167,257 @@ export default function DesktopContent(props: any) {
     [apps, openApp, runningInfo, setToHighestLayerById]
   );
 
+  const closeDesktopApp = useCallback(
+    ({ appKey }: { appKey: string }) => {
+      const app = apps.find((item) => item.key === appKey);
+      const runningApp = runningInfo.find((item) => item.key === appKey);
+      if (!app || !runningApp) return;
+      closeAppById(runningApp.pid);
+    },
+    [apps, runningInfo, closeAppById]
+  );
+
+  const quitGuide = useCallback(
+    ({ appKey }: { appKey: string }) => {
+      closeDesktopApp({ appKey });
+      if (commonConfig?.guideEnabled) {
+        guideModal.openGuideModal();
+      }
+    },
+    [closeDesktopApp, commonConfig?.guideEnabled, guideModal]
+  );
+
+  const handleRequestLogin = useCallback(
+    (data: { appKey: string; pathname: string; query: Record<string, string> }) => {
+      console.log('Guest Mode: Received request_login from Brain:', data);
+      if (data?.appKey) {
+        const launchQuery = {
+          pathname: data.pathname || '/',
+          raw: new URLSearchParams(data.query || {}).toString() || ''
+        };
+        console.log('Guest Mode: Saving autolaunch state:', data.appKey, launchQuery);
+        setAutoLaunch(data.appKey, launchQuery, undefined);
+      }
+      openGuestLoginModal();
+    },
+    [openGuestLoginModal, setAutoLaunch]
+  );
+
   useEffect(() => {
-    return createMasterAPP();
+    const cleanupMaster = createMasterAPP({
+      allowedOrigins: cloudConfig?.allowedOrigins || ['*'],
+      getWorkspaceQuotaApi: async () => {
+        return getWorkspaceQuota().then((res) => res.data?.quota ?? []);
+      },
+      getHostConfigApi: getHostConfig
+    });
+    const relayBrainAnalytics = createBrainAnalyticsRelay({
+      gtmEnabled: () => Boolean(useConfigStore.getState().layoutConfig?.gtmId),
+      userId: () => useSessionStore.getState().session?.user?.userUid,
+      properties: () => {
+        const activeSession = useSessionStore.getState().session;
+        return {
+          ...brainAnalyticsAttribution(window.localStorage),
+          product_user_id: activeSession?.user?.userUid || '',
+          product_user_numeric_id: activeSession?.user?.userId || '',
+          workspace: activeSession?.user?.nsid || '',
+          workspace_plan: activeSession?.subscription?.PlanName || ''
+        };
+      },
+      rybbit: () => {
+        const analyticsWindow = window as typeof window & {
+          sealos_product?: {
+            event: (name: string, properties: Record<string, string | number>) => void;
+            identify: (id: string) => void;
+            getUserId?: () => string | null;
+          };
+        };
+        return analyticsWindow.sealos_product || window.rybbit;
+      },
+      pushGtm: (event) => {
+        window.dataLayer = window.dataLayer || [];
+        window.dataLayer.push(event);
+      }
+    });
+    const trackAnalyticsEvent = (
+      payload: unknown,
+      sender?: { source: MessageEventSource; origin: string }
+    ) => {
+      const brainApp = useAppStore.getState().runningInfo.find((app) => app.key === BRAIN_APP_KEY);
+      const iframe = document.getElementById(
+        `app-window-${BRAIN_APP_KEY}`
+      ) as HTMLIFrameElement | null;
+      if (!isBrainAnalyticsSender(sender, iframe?.contentWindow, brainApp?.data.url)) {
+        return { accepted: false };
+      }
+      return relayBrainAnalytics(payload);
+    };
+    const cleanups = [
+      masterApp?.addEventListen('trackAnalyticsEvent', trackAnalyticsEvent),
+      masterApp?.addEventListen('openDesktopApp', openDesktopApp),
+      masterApp?.addEventListen('closeDesktopApp', closeDesktopApp),
+      masterApp?.addEventListen('requestLogin', handleRequestLogin),
+      masterApp?.addEventListen('quitGuide', quitGuide)
+    ].filter(Boolean) as Array<() => void>;
+
+    return () => {
+      cleanups.forEach((fn) => fn());
+      cleanupMaster?.();
+    };
+  }, [
+    cloudConfig?.allowedOrigins,
+    openDesktopApp,
+    closeDesktopApp,
+    openGuestLoginModal,
+    setAutoLaunch,
+    quitGuide,
+    handleRequestLogin
+  ]);
+
+  useEffect(() => {
+    if (infoData.isSuccess && commonConfig?.realNameAuthEnabled && account?.data?.balance) {
+      if (!infoData?.data?.realName && !infoData?.data?.enterpriseRealName) {
+        realNameAuthNotificationIdRef.current = realNameAuthNotification({
+          duration: null,
+          isClosable: true
+        });
+      }
+    }
+
+    return () => {
+      if (realNameAuthNotificationIdRef.current) {
+        realNameAuthNotification.close(realNameAuthNotificationIdRef.current);
+      }
+    };
+  }, [infoData.data, commonConfig?.realNameAuthEnabled]);
+
+  const [isBannerVisible, setIsBannerVisible] = useState(false);
+  useEffect(() => {
+    const lastClosedTimestamp = localStorage.getItem('bannerLastClosed');
+    const today = new Date().toLocaleDateString();
+
+    if (lastClosedTimestamp !== today) {
+      setIsBannerVisible(true);
+    }
   }, []);
 
-  useEffect(() => {
-    return masterApp?.addEventListen('openDesktopApp', openDesktopApp);
-  }, [openDesktopApp]);
+  // Keep Desktop chrome hidden until the initial target is resolved and loaded.
+  if (isInitialAppLoading) {
+    return (
+      <Box
+        id="desktop"
+        className={styles.desktop}
+        position={'relative'}
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
+        bg="#080A11"
+        aria-busy="true"
+      >
+        {/* Open the target behind the startup mask so its iframe can load immediately. */}
+        {runningInfo.map((process) => {
+          return (
+            <AppWindow key={process.pid} style={{ height: '100vh' }} pid={process.pid}>
+              <IframeWindow pid={process.pid} onLoad={() => onInitialAppLoaded(process.key)} />
+            </AppWindow>
+          );
+        })}
 
-  const { UserGuide, showGuide } = useDriver({ openDesktopApp });
-
-  useQuery(['getGlobalNotification'], getGlobalNotification, {
-    onSuccess(data) {
-      const newID = data.data?.metadata?.uid;
-      if (!newID || newID === localStorage.getItem('GlobalNotification')) return;
-      localStorage.setItem('GlobalNotification', newID);
-      const title =
-        i18n.language === 'zh' && data.data?.spec?.i18ns?.zh?.message
-          ? data.data?.spec?.i18ns?.zh?.message
-          : data.data?.spec?.message;
-      message({
-        title: title,
-        status: 'info',
-        duration: null
-      });
-    }
-  });
+        {initialAppLaunch.status === 'loading' && initialAppLaunch.appKey === BRAIN_APP_KEY && (
+          <Box
+            data-testid="brain-startup-mask"
+            position="fixed"
+            inset={0}
+            zIndex={1000}
+            bg="#080A11"
+            pointerEvents="none"
+          />
+        )}
+      </Box>
+    );
+  }
 
   return (
-    <Box
-      id="desktop"
-      className={styles.desktop}
-      backgroundImage={`url(${BackgroundImageUrl})`}
-      backgroundRepeat={'no-repeat'}
-      backgroundSize={'cover'}
-    >
-      <Flex w="100%" h="100%" alignItems={'center'} flexDirection={'column'}>
-        <Box mt="12vh" minW={'508px'}>
-          <TimeComponent />
-        </Box>
-        {showGuide ? (
-          <>
-            <UserGuide />
-            <Box
-              position="fixed"
-              top="0"
-              left="0"
-              width="100%"
-              height="100%"
-              backgroundColor="rgba(0, 0, 0, 0.7)" // 半透明黑色背景
-              zIndex="11000" // 保证蒙层在最上层
-            />
-          </>
-        ) : (
-          <></>
-        )}
-        {/* desktop apps */}
-        <Grid
-          mt="50px"
-          minW={'508px'}
-          maxH={'300px'}
-          templateRows={'repeat(2, 100px)'}
-          templateColumns={'repeat(5, 72px)'}
-          gap={'36px'}
+    <Box id="desktop" className={styles.desktop} position={'relative'}>
+      <Box position="absolute" top="0" left="0" right="0" bottom="0" zIndex={-10} overflow="hidden">
+        <Image
+          src={backgroundImage || desktopBackgroundImage || '/images/bg-light.svg'}
+          alt=""
+          width="100%"
+          height="100vh"
+          objectFit="cover"
+          objectPosition="bottom"
+        />
+      </Box>
+
+      {!isGuest() && isClient && layoutConfig?.customerServiceURL && <OnlineServiceButton />}
+      <ChakraIndicator />
+      {layoutConfig?.common?.bannerEnabled && (
+        <SaleBanner isBannerVisible={isBannerVisible} setIsBannerVisible={setIsBannerVisible} />
+      )}
+
+      <GlobalNotification />
+
+      {isClient && !isGuest() && (
+        <Flex height={'68px'} px={{ base: '16px', md: '32px' }}>
+          <Account />
+        </Flex>
+      )}
+
+      {isClient && isGuest() && (
+        <Flex
+          height="68px"
+          px={{ base: '16px', md: '32px' }}
+          alignItems="center"
+          justifyContent="space-between"
+          borderBottom="1px solid"
+          borderColor="gray.200"
+          bg="white"
         >
-          {renderApps &&
-            renderApps.slice(0, maxItems).map((item: TApp, index) => (
-              <GridItem
-                w="72px"
-                h="100px"
-                key={index}
-                userSelect="none"
-                cursor={'pointer'}
-                onClick={(e) => handleDoubleClick(e, item)}
-              >
-                <Box
-                  className={item.key}
-                  w="72px"
-                  h="72px"
-                  p={'12px'}
-                  border={'1px solid #FFFFFF'}
-                  borderRadius={8}
-                  boxShadow={'0px 1.16667px 2.33333px rgba(0, 0, 0, 0.2)'}
-                  backgroundColor={'rgba(244, 246, 248, 0.9)'}
-                >
-                  <Image
-                    width="100%"
-                    height="100%"
-                    src={item?.icon}
-                    fallbackSrc={ImageFallBackUrl}
-                    draggable={false}
-                    alt="user avator"
-                  />
-                </Box>
-                <Text
-                  textShadow={'0px 1px 2px rgba(0, 0, 0, 0.4)'}
-                  textAlign={'center'}
-                  mt="8px"
-                  color={'#FFFFFF'}
-                  fontSize={'13px'}
-                  lineHeight={'16px'}
-                >
-                  {item?.i18n?.[i18n?.language]?.name
-                    ? item?.i18n?.[i18n?.language]?.name
-                    : t(item?.name)}
-                </Text>
-              </GridItem>
-            ))}
-        </Grid>
-        <MoreButton />
-        <UserMenu />
+          <Flex alignItems="center" gap="12px">
+            <Text fontSize="18px" fontWeight="600" color="gray.800">
+              {t('v2:guest_mode')}
+            </Text>
+            <Text fontSize="14px" color="gray.500">
+              {t('v2:guest_mode_login_tip')}
+            </Text>
+          </Flex>
+          <Button onClick={openGuestLoginModal} colorScheme="blue">
+            {t('v2:login_sign_up')}
+          </Button>
+        </Flex>
+      )}
+
+      <Flex
+        width={'100%'}
+        height={'calc(100% - 87px)'}
+        pt={{ base: '20px', md: '80px', xl: '120px' }}
+        maxW={'1074px'}
+        pb={'84px'}
+        mx={'auto'}
+        position={'relative'}
+      >
+        <Flex flexDirection={'column'} gap={'8px'} flex={1} position={'relative'} width={'100%'}>
+          <Apps />
+        </Flex>
       </Flex>
+
+      {!isGuest() && (isAppBar ? <AppDock /> : <FloatButton />)}
+
+      {commonConfig?.guideEnabled ? <GuideModal /> : null}
+
       {/* opened apps */}
       {runningInfo.map((process) => {
         return (
           <AppWindow key={process.pid} style={{ height: '100vh' }} pid={process.pid}>
-            <IframeWindow pid={process.pid} />
+            <IframeWindow pid={process.pid} onLoad={() => onInitialAppLoaded(process.key)} />
           </AppWindow>
         );
       })}
+
+      <NeedToMerge />
+
+      {isGuest() && <LoginModal isOpen={showGuestLoginModal} onClose={closeGuestLoginModal} />}
     </Box>
   );
 }

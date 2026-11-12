@@ -1,3 +1,5 @@
+import { WorkspaceSubscription } from './plan';
+
 export type OAuthToken = {
   readonly access_token: string;
   readonly token_type: string;
@@ -6,7 +8,12 @@ export type OAuthToken = {
 };
 
 export type UserInfo = {
+  readonly userRestrictedLevel?: number;
+  readonly realName?: string;
+  readonly enterpriseRealName?: string;
   readonly k8s_username: string;
+  readonly username?: string;
+  readonly email?: string;
   readonly name: string;
   readonly avatar: string;
   readonly nsid: string;
@@ -20,11 +27,12 @@ export type UserInfo = {
 export type KubeConfig = string;
 
 export type Session = {
-  token: string; // jwt token
-  // 提供一些简单的信息
-  user: UserInfo;
-  // 帮忙导出用的
+  token: string;
+  subscription: WorkspaceSubscription | null;
+  user: UserInfo | null;
   kubeconfig: KubeConfig;
+  isGuest?: boolean;
+  guestId?: string;
 };
 export type ApiSession = {
   // 提供一些简单的信息

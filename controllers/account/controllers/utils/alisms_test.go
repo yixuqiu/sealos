@@ -20,23 +20,37 @@ import (
 	"testing"
 
 	"github.com/alibabacloud-go/dysmsapi-20170525/v3/client"
-	"github.com/alibabacloud-go/tea/tea"
 )
 
 func TestSendSms(t *testing.T) {
+	requireMessagingTest(t, "ak", "sk", "phone", "sign_name", "template_code")
 	clt, err := CreateSMSClient(os.Getenv("ak"), os.Getenv("sk"), "dysmsapi.aliyuncs.com")
 	if err != nil {
 		t.Fatal(err)
 	}
 	userID, oweAmount := "uid", "1234"
 	err = SendSms(clt, &client.SendSmsRequest{
-		PhoneNumbers: tea.String(os.Getenv("phone")),
-		SignName:     tea.String(os.Getenv("sign_name")),
-		TemplateCode: tea.String(os.Getenv("template_code")),
+		PhoneNumbers: new(os.Getenv("phone")),
+		SignName:     new(os.Getenv("sign_name")),
+		TemplateCode: new(os.Getenv("template_code")),
 		// user_id:, oweAmount
-		TemplateParam: tea.String("{\"user_id\":\"" + userID + "\",\"oweamount\":\"" + oweAmount + "\"}"),
+		TemplateParam: new(
+			"{\"user_id\":\"" + userID + "\",\"oweamount\":\"" + oweAmount + "\"}",
+		),
 	})
 	if err != nil {
 		t.Fatal(fmt.Errorf("send sms failed: %w", err))
+	}
+}
+
+func requireMessagingTest(t *testing.T, envNames ...string) {
+	t.Helper()
+	if os.Getenv("RUN_MESSAGING_TESTS") != "true" {
+		t.Skip("set RUN_MESSAGING_TESTS=true to run messaging provider tests")
+	}
+	for _, name := range envNames {
+		if os.Getenv(name) == "" {
+			t.Skipf("requires %s", name)
+		}
 	}
 }

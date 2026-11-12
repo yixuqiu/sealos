@@ -1,12 +1,18 @@
 {
   "name": "sealos-desktop-sdk",
-  "version": "0.1.14",
+  "version": "0.1.24",
   "description": "sealos desktop sdk",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "rollup -c",
     "dev": "rollup -c -w"
   },
+  "files": [
+    "dist/",
+    "README.md",
+    "README_zh.md",
+    "RELEASING.md"
+  ],
   "exports": {
     ".": {
       "import": "./dist/index.esm.js",
@@ -46,7 +52,6 @@
     }
   },
   "keywords": [],
-  "author": "lizhenq2009@gmail.com",
   "license": "ISC",
   "devDependencies": {
     "@kubernetes/client-node": "^0.18.1",

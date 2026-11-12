@@ -1,10 +1,9 @@
-# sealos app launchpad
+# Sealos License
 
 ## project tree
 
 ```bash
 .
-├── Dockerfile
 ├── Makefile
 ├── README.md
 ├── deploy

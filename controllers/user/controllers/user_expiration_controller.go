@@ -20,26 +20,24 @@ import (
 	"context"
 	"errors"
 
-	utilcontroller "github.com/labring/operator-sdk/controller"
-
 	"github.com/go-logr/logr"
+	userv1 "github.com/labring/sealos/controllers/user/api/v1"
+	"github.com/labring/sealos/controllers/user/controllers/helper/finalizer"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/record"
+	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	userv1 "github.com/labring/sealos/controllers/user/api/v1"
 )
 
 // UserExpirationReconciler reconciles a Secret object
 type UserExpirationReconciler struct {
 	Logger   logr.Logger
-	Recorder record.EventRecorder
+	Recorder events.EventRecorder
 	config   *rest.Config
 	*runtime.Scheme
 	client.Client
-	finalizer *utilcontroller.Finalizer
+	finalizer *finalizer.Finalizer
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -51,14 +49,17 @@ type UserExpirationReconciler struct {
 //
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.11.0/pkg/reconcile
-func (r *UserExpirationReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+func (r *UserExpirationReconciler) Reconcile(
+	ctx context.Context,
+	req ctrl.Request,
+) (ctrl.Result, error) {
 	r.Logger.V(1).Info("start reconcile for users expiration")
 	user := &userv1.User{}
 	if err := r.Get(ctx, req.NamespacedName, user); err != nil {
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	if ok, err := r.finalizer.RemoveFinalizer(ctx, user, utilcontroller.DefaultFunc); ok {
+	if ok, err := r.finalizer.RemoveFinalizer(ctx, user, finalizer.DefaultFunc); ok {
 		return ctrl.Result{}, err
 	}
 
@@ -79,10 +80,11 @@ func (r *UserExpirationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	}
 	r.Logger = ctrl.Log.WithName(controllerName)
 	if r.Recorder == nil {
-		r.Recorder = mgr.GetEventRecorderFor(controllerName)
+		r.Recorder = mgr.GetEventRecorder(controllerName)
 	}
 	if r.finalizer == nil {
-		r.finalizer = utilcontroller.NewFinalizer(r.Client, "sealos.io/user.expiration.finalizers")
+		r.finalizer = finalizer.NewFinalizer(r.Client, "sealos.io/user.expiration.finalizers").
+			WithReader(mgr.GetAPIReader())
 	}
 	r.Scheme = mgr.GetScheme()
 	r.config = mgr.GetConfig()
@@ -92,7 +94,10 @@ func (r *UserExpirationReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *UserExpirationReconciler) reconcile(_ context.Context, _ client.Object) (ctrl.Result, error) {
-	//TODO add  Expiration logic
+func (r *UserExpirationReconciler) reconcile(
+	_ context.Context,
+	_ client.Object,
+) (ctrl.Result, error) {
+	// TODO add  Expiration logic
 	return ctrl.Result{}, nil
 }

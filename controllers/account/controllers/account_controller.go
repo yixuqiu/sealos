@@ -21,70 +21,116 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"strconv"
 	"strings"
 	"time"
 
-	"go.mongodb.org/mongo-driver/bson/primitive"
-
-	"github.com/google/uuid"
-
-	gonanoid "github.com/matoous/go-nanoid/v2"
-
-	"gorm.io/gorm"
-
-	"k8s.io/client-go/rest"
-
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/client-go/kubernetes"
-
 	"github.com/go-logr/logr"
-
+	"github.com/google/uuid"
 	accountv1 "github.com/labring/sealos/controllers/account/api/v1"
 	"github.com/labring/sealos/controllers/pkg/database"
-	"github.com/labring/sealos/controllers/pkg/pay"
 	"github.com/labring/sealos/controllers/pkg/resources"
 	pkgtypes "github.com/labring/sealos/controllers/pkg/types"
+	usernotify "github.com/labring/sealos/controllers/pkg/user_notify"
+	"github.com/labring/sealos/controllers/pkg/utils"
 	"github.com/labring/sealos/controllers/pkg/utils/env"
+	"github.com/labring/sealos/controllers/pkg/utils/logger"
 	"github.com/labring/sealos/controllers/pkg/utils/retry"
 	userv1 "github.com/labring/sealos/controllers/user/api/v1"
-
+	gonanoid "github.com/matoous/go-nanoid/v2"
+	"github.com/sirupsen/logrus"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"gorm.io/gorm"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/source"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
+type CVMTaskRunner struct {
+	DBClient database.Interface
+	Logger   logr.Logger
+	*AccountReconciler
+}
+
+func (r *CVMTaskRunner) Start(ctx context.Context) error {
+	ticker := time.NewTicker(env.GetDurationEnvWithDefault("BILLING_CVM_INTERVAL", 10*time.Minute))
+	defer func() {
+		ticker.Stop()
+		r.Logger.Info("stop billing cvm")
+	}()
+	for {
+		select {
+		case <-ticker.C:
+			r.Logger.Info("start billing cvm", "time", time.Now().Format(time.RFC3339))
+			err := r.BillingCVM()
+			if err != nil {
+				r.Logger.Error(err, "fail to billing cvm")
+			}
+			r.Logger.Info("end billing cvm", "time", time.Now().Format(time.RFC3339))
+		case <-ctx.Done():
+			return nil
+		}
+	}
+}
+
 const (
-	ACCOUNTNAMESPACEENV          = "ACCOUNT_NAMESPACE"
-	DEFAULTACCOUNTNAMESPACE      = "sealos-system"
-	AccountAnnotationNewAccount  = "account.sealos.io/new-account"
-	AccountAnnotationIgnoreQuota = "account.sealos.io/ignore-quota"
-	NEWACCOUNTAMOUNTENV          = "NEW_ACCOUNT_AMOUNT"
-	RECHARGEGIFT                 = "recharge-gift"
-	SEALOS                       = "sealos"
-	DefaultInitialBalance        = 5_000_000
+	ACCOUNTNAMESPACEENV     = "ACCOUNT_NAMESPACE"
+	DEFAULTACCOUNTNAMESPACE = "sealos-system"
+	RECHARGEGIFT            = "recharge-gift"
+	SEALOS                  = "sealos"
+
+	EnvNonFreeTrialEnabled = "NON_FREE_TRIAL_ENABLED"
+	EnvJwtSecret           = "ACCOUNT_API_JWT_SECRET"
+	EnvAdminJwtSecret      = "ACCOUNT_ADMIN_JWT_SECRET"
+	EnvDesktopJwtSecret    = "DESKTOP_API_JWT_SECRET"
+
+	InitAccountTimeAnnotation   = "user.sealos.io/init-account-time"
+	WorkspaceStatusAnnotation   = "user.sealos.io/workspace-status"
+	WorkspaceStatusSubscription = "subscription"
+	WorkspaceStatusPAYG         = "payg"
 )
+
+var SubscriptionEnabled = false
 
 // AccountReconciler reconciles an Account object
 type AccountReconciler struct {
 	client.Client
-	AccountV2              database.AccountV2
-	Scheme                 *runtime.Scheme
-	Logger                 logr.Logger
-	AccountSystemNamespace string
-	DBClient               database.Account
-	CVMDBClient            database.CVM
-	MongoDBURI             string
-	Activities             pkgtypes.Activities
-	DefaultDiscount        pkgtypes.RechargeDiscount
+	AccountV2                      database.AccountV2
+	InitUserAccountFunc            func(user *pkgtypes.UserQueryOpts) (*pkgtypes.Account, error)
+	Scheme                         *runtime.Scheme
+	Logger                         logr.Logger
+	VLogger                        *logger.Logger
+	accountSystemNamespace         string
+	DBClient                       database.Account
+	CVMDBClient                    database.CVM
+	MongoDBURI                     string
+	Activities                     pkgtypes.Activities
+	DefaultDiscount                pkgtypes.RechargeDiscount
+	SubscriptionQuotaLimit         map[string]corev1.ResourceList
+	SyncNSQuotaFunc                func(ctx context.Context, owner, nsName string) error
+	SkipExpiredUserTimeDuration    time.Duration
+	localDomain                    string
+	allRegionDomain                []string
+	jwtManager                     *utils.JWTManager
+	adminJwtManager                *utils.JWTManager
+	desktopJwtManager              *utils.JWTManager
+	workspaceSubPlans              []pkgtypes.WorkspaceSubscriptionPlan
+	workspaceSubPlansResourceLimit map[string]corev1.ResourceList
+
+	UserContactProvider     usernotify.UserContactProvider
+	UserNotificationService usernotify.EventNotificationService
+	NonSupportFreeTrial     bool
 }
 
 //+kubebuilder:rbac:groups=account.sealos.io,resources=accounts,verbs=get;list;watch;create;update;patch;delete
@@ -92,128 +138,212 @@ type AccountReconciler struct {
 //+kubebuilder:rbac:groups=account.sealos.io,resources=accounts/finalizers,verbs=update
 //+kubebuilder:rbac:groups=core,resources=resourcequotas,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=limitranges,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=user.sealos.io,resources=users,verbs=get;list;watch
+//+kubebuilder:rbac:groups=user.sealos.io,resources=users,verbs=create;get;list;patch;watch
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=rolebindings,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=rbac.authorization.k8s.io,resources=roles,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 
 func (r *AccountReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	//It should not stop the normal process for the failure to delete the payment
-	// delete payments that exist for more than 5 minutes
-	if err := r.DeletePayment(ctx); err != nil {
-		r.Logger.Error(err, "delete payment failed")
-	}
-	user := &userv1.User{}
-	owner := ""
-	if err := r.Get(ctx, client.ObjectKey{Namespace: req.Namespace, Name: req.Name}, user); err == nil {
-		if owner = user.Annotations[userv1.UserAnnotationOwnerKey]; owner == "" {
-			return ctrl.Result{}, fmt.Errorf("user owner is empty")
+	user := &metav1.PartialObjectMetadata{}
+	user.SetGroupVersionKind(userv1.GroupVersion.WithKind("User"))
+	if err := r.Get(
+		ctx,
+		client.ObjectKey{Namespace: req.Namespace, Name: req.Name},
+		user,
+	); err == nil {
+		if owner := user.Annotations[userv1.UserAnnotationOwnerKey]; owner == "" {
+			return ctrl.Result{}, errors.New("user owner is empty")
+		}
+		if user.Annotations[InitAccountTimeAnnotation] != "" {
+			return ctrl.Result{}, nil
 		}
 		// This is only used to monitor and initialize user resource creation data,
 		// determine the resource quota created by the owner user and the resource quota initialized by the account user,
 		// and only the resource quota created by the team user
-		_, err = r.syncAccount(ctx, owner, "ns-"+user.Name)
-		return ctrl.Result{}, err
-	} else if client.IgnoreNotFound(err) != nil {
-		return ctrl.Result{}, err
-	}
-
-	payment := &accountv1.Payment{}
-	if err := r.Get(ctx, client.ObjectKey{Namespace: req.Namespace, Name: req.Name}, payment); err != nil {
-		return ctrl.Result{}, client.IgnoreNotFound(err)
-	}
-	if payment.Spec.UserID == "" || payment.Spec.Amount == 0 {
-		return ctrl.Result{}, fmt.Errorf("payment is invalid: %v", payment)
-	}
-	if payment.Status.TradeNO == "" {
-		return ctrl.Result{Requeue: true, RequeueAfter: time.Millisecond * 300}, nil
-	}
-	if payment.Status.Status == pay.PaymentSuccess {
-		return ctrl.Result{}, nil
-	}
-
-	account, err := r.syncAccount(ctx, getUsername(payment.Spec.UserID), payment.Namespace)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("get account failed: %v", err)
-	}
-
-	// get payment handler
-	payHandler, err := pay.NewPayHandler(payment.Spec.PaymentMethod)
-	if err != nil {
-		r.Logger.Error(err, "get payment handler failed")
-		return ctrl.Result{}, err
-	}
-	// get payment details(status, amount)
-	// TODO The GetPaymentDetails may cause issues when using Stripe
-	status, orderAmount, err := payHandler.GetPaymentDetails(payment.Status.TradeNO)
-	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("query order failed: %v", err)
-	}
-	r.Logger.V(1).Info("query order details", "orderStatus", status, "orderAmount", orderAmount)
-	switch status {
-	case pay.PaymentSuccess:
-		//1¥ = 100WechatPayAmount; 1 WechatPayAmount = 10000 SealosAmount
-		payAmount := orderAmount * 10000
-		gift, err := r.getAmountWithRates(payAmount, account)
-		if err != nil {
-			r.Logger.Error(err, "get gift error")
-		}
-		if err = r.AccountV2.Payment(&pkgtypes.Payment{
-			PaymentRaw: pkgtypes.PaymentRaw{
-				UserUID:         account.UserUID,
-				Amount:          payAmount,
-				Gift:            gift,
-				CreatedAt:       payment.CreationTimestamp.Time,
-				RegionUserOwner: owner,
-				Method:          payment.Spec.PaymentMethod,
-				TradeNO:         payment.Status.TradeNO,
-				CodeURL:         payment.Status.CodeURL,
-			},
-		}); err != nil {
-			r.Logger.Error(err, "save payment failed", "payment", payment)
+		_, err = r.syncAccount(ctx, user)
+		if errors.Is(err, gorm.ErrRecordNotFound) &&
+			user.CreationTimestamp.Add(r.SkipExpiredUserTimeDuration).Before(time.Now()) {
 			return ctrl.Result{}, nil
 		}
-		payment.Status.Status = pay.PaymentSuccess
-		if err := r.Status().Update(ctx, payment); err != nil {
-			return ctrl.Result{}, fmt.Errorf("update payment failed: %v", err)
+		if err == nil {
+			original := user.DeepCopy()
+			if user.Annotations == nil {
+				user.Annotations = make(map[string]string)
+			}
+			user.Annotations[InitAccountTimeAnnotation] = time.Now().Format(time.RFC3339)
+			return ctrl.Result{}, r.Patch(ctx, user, client.MergeFrom(original))
 		}
-
-	case pay.PaymentProcessing, pay.PaymentNotPaid:
-		return ctrl.Result{Requeue: true, RequeueAfter: time.Second}, nil
-	case pay.PaymentFailed, pay.PaymentExpired:
-		if err := r.Delete(ctx, payment); err != nil {
-			return ctrl.Result{}, fmt.Errorf("delete payment failed: %v", err)
-		}
-		return ctrl.Result{}, nil
-	default:
-		return ctrl.Result{}, fmt.Errorf("unknown status: %v", err)
+		return ctrl.Result{}, err
+	} else if client.IgnoreNotFound(
+		err,
+	) != nil {
+		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
 }
 
-func (r *AccountReconciler) syncAccount(ctx context.Context, owner string, userNamespace string) (*pkgtypes.Account, error) {
-	if err := r.syncResourceQuotaAndLimitRange(ctx, userNamespace); err != nil {
-		r.Logger.Error(err, "sync resource resourceQuota and limitRange failed")
-	}
-	if err := r.adaptEphemeralStorageLimitRange(ctx, userNamespace); err != nil {
-		r.Logger.Error(err, "adapt ephemeral storage limitRange failed")
-	}
-	if getUsername(userNamespace) != owner {
-		return nil, nil
-	}
-	account, err := r.AccountV2.NewAccount(&pkgtypes.UserQueryOpts{Owner: owner})
+func (r *AccountReconciler) syncAccount(
+	ctx context.Context,
+	userCr *metav1.PartialObjectMetadata,
+) (account *pkgtypes.Account, err error) {
+	owner := userCr.Annotations[userv1.UserAnnotationOwnerKey]
+	userNamespace := "ns-" + userCr.Name
+	// if err := r.adaptEphemeralStorageLimitRange(ctx, userNamespace); err != nil {
+	//	r.Logger.Error(err, "adapt ephemeral storage limitRange failed")
+	//}
+	user, err := r.AccountV2.GetUser(&pkgtypes.UserQueryOpts{Owner: owner, IgnoreEmpty: true})
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to create %s account: %v", owner, err)
+		return nil, err
 	}
-	return account, nil
+	if user == nil {
+		return nil, gorm.ErrRecordNotFound
+	}
+	if getUsername(userNamespace) == owner {
+		account, err = r.InitUserAccountFunc(&pkgtypes.UserQueryOpts{Owner: owner})
+		if err != nil {
+			return nil, err
+		}
+		if err := r.syncDebt(ctx, owner); err != nil {
+			return nil, fmt.Errorf("sync user debt failed: %w", err)
+		}
+	}
+	if userCr.Annotations != nil &&
+		userCr.Annotations[WorkspaceStatusAnnotation] == WorkspaceStatusSubscription {
+		if err := r.syncSubscriptionWorkspaceResourceQuotaAndLimitRange(
+			ctx,
+			user.UID,
+			userNamespace,
+		); err != nil {
+			return nil, fmt.Errorf(
+				"sync subscription workspace resource quota and limit range failed: %w",
+				err,
+			)
+		}
+	} else {
+		if err := r.syncResourceQuotaAndLimitRange(ctx, userNamespace); err != nil {
+			return nil, fmt.Errorf(
+				"sync user namespace resource quota and limit range failed: %w",
+				err,
+			)
+		}
+	}
+	return account, err
 }
 
-func (r *AccountReconciler) syncResourceQuotaAndLimitRange(ctx context.Context, nsName string) error {
-	objs := []client.Object{client.Object(resources.GetDefaultLimitRange(nsName, nsName)), client.Object(resources.GetDefaultResourceQuota(nsName, ResourceQuotaPrefix+nsName))}
+func (r *AccountReconciler) syncDebt(ctx context.Context, owner string) error {
+	userUID, err := r.AccountV2.GetUserUID(&pkgtypes.UserQueryOpts{Owner: owner})
+	if err != nil {
+		return fmt.Errorf("get userUID failed: %w", err)
+	}
+	var count int64
+	err = r.AccountV2.GetGlobalDB().
+		Model(&pkgtypes.Debt{}).
+		Where("user_uid = ?", userUID).
+		Count(&count).
+		Error
+	if err != nil {
+		return fmt.Errorf("check user debt existence failed: %w", err)
+	}
+	if count <= 0 {
+		createDebt, err := r.initializeDebt(ctx, owner, userUID)
+		if err != nil {
+			return fmt.Errorf("initialize user debt failed: %w", err)
+		}
+		if err = r.AccountV2.GetGlobalDB().Create(createDebt).Error; err != nil {
+			return fmt.Errorf("create user debt failed: %w", err)
+		}
+	}
+	return nil
+}
+
+func (r *AccountReconciler) initializeDebt(
+	ctx context.Context,
+	owner string,
+	userUID uuid.UUID,
+) (*pkgtypes.Debt, error) {
+	debtCr := &accountv1.Debt{}
+	err := r.Get(
+		ctx,
+		client.ObjectKey{Namespace: r.accountSystemNamespace, Name: "debt-" + owner},
+		debtCr,
+	)
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			return nil, fmt.Errorf("failed to get user debt from CR: %w", err)
+		}
+		return &pkgtypes.Debt{
+			UserUID:           userUID,
+			AccountDebtStatus: pkgtypes.NormalPeriod,
+			CreatedAt:         time.Now().UTC(),
+			UpdatedAt:         time.Now().UTC(),
+		}, nil
+	}
+
+	return convertDebtCrToDebt(debtCr, userUID), nil
+}
+
+func convertDebtCrToDebt(debtCr *accountv1.Debt, userUID uuid.UUID) *pkgtypes.Debt {
+	debt := &pkgtypes.Debt{
+		UserUID:           userUID,
+		AccountDebtStatus: convertDebtStatus(debtCr.Status.AccountDebtStatus),
+		CreatedAt:         debtCr.CreationTimestamp.UTC(),
+	}
+	if debtCr.Status.LastUpdateTimestamp > 0 {
+		debt.UpdatedAt = time.Unix(debtCr.Status.LastUpdateTimestamp, 0).UTC()
+	} else {
+		debt.UpdatedAt = debtCr.CreationTimestamp.UTC()
+	}
+	statusRecords := make([]pkgtypes.DebtStatusRecord, len(debtCr.Status.DebtStatusRecords))
+	for i, record := range debtCr.Status.DebtStatusRecords {
+		statusRecords[i] = pkgtypes.DebtStatusRecord{
+			ID:            uuid.New(),
+			UserUID:       userUID,
+			LastStatus:    convertDebtStatus(record.LastStatus),
+			CurrentStatus: convertDebtStatus(record.CurrentStatus),
+			CreateAt:      record.UpdateTime.UTC(),
+		}
+	}
+	debt.StatusRecords = statusRecords
+	return debt
+}
+
+func convertDebtStatus(statusType accountv1.DebtStatusType) pkgtypes.DebtStatusType {
+	switch statusType {
+	case accountv1.NormalPeriod:
+		return pkgtypes.NormalPeriod
+	case accountv1.WarningPeriod:
+		return pkgtypes.DebtPeriod
+	case accountv1.ApproachingDeletionPeriod:
+		return pkgtypes.DebtPeriod
+	case accountv1.ImminentDeletionPeriod:
+		return pkgtypes.DebtDeletionPeriod
+	case accountv1.LowBalancePeriod:
+		return pkgtypes.LowBalancePeriod
+	case accountv1.CriticalBalancePeriod:
+		return pkgtypes.CriticalBalancePeriod
+	case accountv1.DebtPeriod:
+		return pkgtypes.DebtPeriod
+	case accountv1.DebtDeletionPeriod:
+		return pkgtypes.DebtDeletionPeriod
+	case accountv1.FinalDeletionPeriod:
+		return pkgtypes.FinalDeletionPeriod
+	case "":
+		return pkgtypes.NormalPeriod
+	default:
+		logrus.Errorf("unknown debt status type: %v", statusType)
+		return ""
+	}
+}
+
+func (r *AccountReconciler) syncResourceQuotaAndLimitRange(
+	ctx context.Context,
+	nsName string,
+) error {
+	objs := []client.Object{
+		client.Object(resources.GetDefaultLimitRange(nsName, nsName)),
+		client.Object(resources.GetDefaultResourceQuota(nsName, ResourceQuotaPrefix+nsName)),
+	}
 	for i := range objs {
 		err := retry.Retry(10, 1*time.Second, func() error {
 			_, err := controllerutil.CreateOrUpdate(ctx, r.Client, objs[i], func() error {
@@ -222,126 +352,208 @@ func (r *AccountReconciler) syncResourceQuotaAndLimitRange(ctx context.Context, 
 			return err
 		})
 		if err != nil {
-			return fmt.Errorf("sync resource %T failed: %v", objs[i], err)
+			return fmt.Errorf("sync resource %T failed: %w", objs[i], err)
 		}
 	}
 	return nil
 }
 
-func (r *AccountReconciler) adaptEphemeralStorageLimitRange(ctx context.Context, nsName string) error {
-	limit := resources.GetDefaultLimitRange(nsName, nsName)
-	return retry.Retry(10, 1*time.Second, func() error {
-		_, err := controllerutil.CreateOrUpdate(ctx, r.Client, limit, func() error {
-			if len(limit.Spec.Limits) == 0 {
-				limit = resources.GetDefaultLimitRange(nsName, nsName)
-			}
-			limit.Spec.Limits[0].DefaultRequest[corev1.ResourceEphemeralStorage] = resources.LimitRangeDefault[corev1.ResourceEphemeralStorage]
-			limit.Spec.Limits[0].Default[corev1.ResourceEphemeralStorage] = resources.LimitRangeDefault[corev1.ResourceEphemeralStorage]
-			//if _, ok := limit.Spec.Limits[0].Default[corev1.ResourceEphemeralStorage]; !ok {
-			//}
-			return nil
-		})
-		return err
-	})
-}
-
-// DeletePayment delete payments that exist for more than 5 minutes
-func (r *AccountReconciler) DeletePayment(ctx context.Context) error {
-	payments := &accountv1.PaymentList{}
-	err := r.List(ctx, payments)
-	if err != nil {
-		return err
-	}
-	for _, payment := range payments.Items {
-		//get payment handler
-		payHandler, err := pay.NewPayHandler(payment.Spec.PaymentMethod)
-		if err != nil {
-			r.Logger.Error(err, "get payment handler failed")
+func (r *AccountReconciler) syncSubscriptionWorkspaceResourceQuotaAndLimitRange(
+	ctx context.Context,
+	userUID uuid.UUID,
+	nsName string,
+) error {
+	objs := []client.Object{client.Object(resources.GetDefaultLimitRange(nsName, nsName))}
+	for i := range objs {
+		err := retry.Retry(10, 1*time.Second, func() error {
+			_, err := controllerutil.CreateOrUpdate(ctx, r.Client, objs[i], func() error {
+				return nil
+			})
 			return err
-		}
-		//delete payment if it is exist for more than 5 minutes
-		if time.Since(payment.CreationTimestamp.Time) > time.Minute*5 {
-			if payment.Status.TradeNO != "" {
-				status, amount, err := payHandler.GetPaymentDetails(payment.Status.TradeNO)
-				if err != nil {
-					r.Logger.Error(err, "get payment details failed")
-				}
-				if status == pay.PaymentSuccess {
-					r.Logger.Info("payment success, post delete payment cr", "payment", payment, "amount", amount)
-				}
-				// expire session
-				if err = payHandler.ExpireSession(payment.Status.TradeNO); err != nil {
-					r.Logger.Error(err, "cancel payment failed")
-				}
-			}
-			if err := r.Delete(ctx, &payment); err != nil {
-				return err
-			}
+		})
+		if err != nil {
+			return fmt.Errorf("sync resource %T failed: %w", objs[i], err)
 		}
 	}
+	// determine that each user subscribes only once
+	err := r.AccountV2.GetGlobalDB().
+		Where(&pkgtypes.WorkspaceSubscription{UserUID: userUID}).
+		First(&pkgtypes.WorkspaceSubscription{}).
+		Error
+	if err == nil {
+		// If already have other subscription Spaces, just create WorkspaceSubscription and set the quota to 0
+		return r.handlerNoTrialInitialWorkspaceSubscription(ctx, userUID, nsName)
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return fmt.Errorf("check user workspace subscription existence failed: %w", err)
+	}
+	if r.NonSupportFreeTrial {
+		return r.handlerNoTrialInitialWorkspaceSubscription(ctx, userUID, nsName)
+	} else {
+		err = r.handleProbationPeriodWorkspaceSubscription(ctx, userUID, nsName)
+		if err != nil {
+			return fmt.Errorf("handle workspace subscription created failed: %w", err)
+		}
+	}
+	r.Logger.Info("handle workspace subscription created", "namespace", nsName)
 	return nil
 }
+
+// func (r *AccountReconciler) adaptEphemeralStorageLimitRange(ctx context.Context, nsName string) error {
+//	limit := resources.GetDefaultLimitRange(nsName, nsName)
+//	return retry.Retry(10, 1*time.Second, func() error {
+//		_, err := controllerutil.CreateOrUpdate(ctx, r.Client, limit, func() error {
+//			if len(limit.Spec.Limits) == 0 {
+//				limit = resources.GetDefaultLimitRange(nsName, nsName)
+//			}
+//			limit.Spec.Limits[0].DefaultRequest[corev1.ResourceEphemeralStorage] = resources.LimitRangeDefault[corev1.ResourceEphemeralStorage]
+//			limit.Spec.Limits[0].Default[corev1.ResourceEphemeralStorage] = resources.LimitRangeDefault[corev1.ResourceEphemeralStorage]
+//			//if _, ok := limit.Spec.Limits[0].Default[corev1.ResourceEphemeralStorage]; !ok {
+//			//}
+//			return nil
+//		})
+//		return err
+//	})
+//}
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *AccountReconciler) SetupWithManager(mgr ctrl.Manager, rateOpts controller.Options) error {
 	r.Logger = ctrl.Log.WithName("account_controller")
-	r.AccountSystemNamespace = env.GetEnvWithDefault(ACCOUNTNAMESPACEENV, DEFAULTACCOUNTNAMESPACE)
+	r.accountSystemNamespace = env.GetEnvWithDefault(
+		accountv1.AccountSystemNamespaceEnv,
+		"account-system",
+	)
+	regions, err := r.AccountV2.GetRegions()
+	if err != nil {
+		return fmt.Errorf("get regions failed: %w", err)
+	}
+	r.allRegionDomain = make([]string, len(regions))
+	for i, region := range regions {
+		r.allRegionDomain[i] = region.Domain
+	}
+	r.localDomain = r.AccountV2.GetLocalRegion().Domain
+	jwtSecret := os.Getenv(EnvJwtSecret)
+	if jwtSecret == "" {
+		return fmt.Errorf("empty jwt secret env: %s", EnvJwtSecret)
+	}
+	adminJwtSecret := os.Getenv(EnvAdminJwtSecret)
+	if adminJwtSecret == "" {
+		return fmt.Errorf("empty admin jwt secret env: %s", EnvAdminJwtSecret)
+	}
+	if adminJwtSecret == jwtSecret {
+		return fmt.Errorf("admin jwt secret must differ from %s", EnvJwtSecret)
+	}
+	r.jwtManager = utils.NewJWTManager(jwtSecret, 10*time.Minute)
+	r.adminJwtManager = utils.NewJWTManager(adminJwtSecret, 10*time.Minute)
+	plans, err := r.AccountV2.GetWorkspaceSubscriptionPlanList()
+	if err != nil {
+		return fmt.Errorf("failed to get workspace subscription plans: %w", err)
+	}
+	res, err := resources.ParseResourceLimitWithPlans(plans)
+	if err != nil {
+		return fmt.Errorf("failed to parse resource limits with plans: %w", err)
+	}
+	r.workspaceSubPlans = plans
+	r.workspaceSubPlansResourceLimit = res
+	r.InitUserAccountFunc = r.AccountV2.NewAccount
+	r.NonSupportFreeTrial = os.Getenv(EnvNonFreeTrialEnabled) == trueStatus
+	r.VLogger = logger.NewFeishuLogger(
+		nil,
+		os.Getenv("FEISHU_WEBHOOK"),
+		logger.INFO,
+		r.localDomain+"-account-controller",
+	)
+	notifyConfigStr := os.Getenv("NOTIFY_CONFIG")
+	if notifyConfigStr != "" {
+		notifyConfig, err := usernotify.ParseConfigsWithJSON(notifyConfigStr)
+		if err != nil {
+			return fmt.Errorf("parse notify config error: %w", err)
+		}
+		r.UserContactProvider = usernotify.NewMemoryContactProvider()
+		r.UserNotificationService = usernotify.NewEventNotificationService(
+			notifyConfig,
+			r.UserContactProvider,
+		)
+	} else {
+		r.Logger.Info("NOTIFY_CONFIG is empty")
+	}
+	// r.SyncNSQuotaFunc = r.syncResourceQuotaAndLimitRange
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&userv1.User{}, builder.WithPredicates(OnlyCreatePredicate{})).
-		Watches(&source.Kind{Type: &accountv1.Payment{}}, &handler.EnqueueRequestForObject{}).
+		For(&userv1.User{}, builder.WithPredicates(OnlyCreatePredicate{}), builder.OnlyMetadata).
 		WithOptions(rateOpts).
 		Complete(r)
 }
 
+type OnlyCreatePredicate struct {
+	predicate.Funcs
+}
+
+func (OnlyCreatePredicate) Update(_ event.UpdateEvent) bool {
+	return false
+}
+
+func (OnlyCreatePredicate) Create(_ event.CreateEvent) bool {
+	return true
+}
+
 func RawParseRechargeConfig() (activities pkgtypes.Activities, discountsteps []int64, discountratios []float64, returnErr error) {
 	// local test
-	//config, err := clientcmd.BuildConfigFromFlags("", os.Getenv("KUBECONFIG"))
-	//if err != nil {
+	// config, err := clientcmd.BuildConfigFromFlags("", os.Getenv("KUBECONFIG"))
+	// if err != nil {
 	//	fmt.Printf("Error building kubeconfig: %v\n", err)
 	//	os.Exit(1)
 	//}
 	config, err := rest.InClusterConfig()
 	if err != nil {
-		returnErr = fmt.Errorf("get in cluster config failed: %v", err)
-		return
+		returnErr = fmt.Errorf("get in cluster config failed: %w", err)
+		return activities, discountsteps, discountratios, returnErr
 	}
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		returnErr = fmt.Errorf("get clientset failed: %v", err)
-		return
+		returnErr = fmt.Errorf("get clientset failed: %w", err)
+		return activities, discountsteps, discountratios, returnErr
 	}
-	configMap, err := clientset.CoreV1().ConfigMaps(SEALOS).Get(context.TODO(), RECHARGEGIFT, metav1.GetOptions{})
+	configMap, err := clientset.CoreV1().
+		ConfigMaps(SEALOS).
+		Get(context.TODO(), RECHARGEGIFT, metav1.GetOptions{})
 	if err != nil {
-		returnErr = fmt.Errorf("get configmap failed: %v", err)
-		return
+		returnErr = fmt.Errorf("get configmap failed: %w", err)
+		return activities, discountsteps, discountratios, returnErr
 	}
-	if returnErr = parseConfigList(configMap.Data["steps"], &discountsteps, "steps"); returnErr != nil {
-		return
+	if returnErr = parseConfigList(
+		configMap.Data["steps"],
+		&discountsteps,
+		"steps",
+	); returnErr != nil {
+		return activities, discountsteps, discountratios, returnErr
 	}
 
-	if returnErr = parseConfigList(configMap.Data["ratios"], &discountratios, "ratios"); returnErr != nil {
-		return
+	if returnErr = parseConfigList(
+		configMap.Data["ratios"],
+		&discountratios,
+		"ratios",
+	); returnErr != nil {
+		return activities, discountsteps, discountratios, returnErr
 	}
 
 	if activityStr := configMap.Data["activities"]; activityStr != "" {
 		returnErr = json.Unmarshal([]byte(activityStr), &activities)
 	}
-	return
+	return activities, discountsteps, discountratios, returnErr
 }
 
-func parseConfigList(s string, list interface{}, configName string) error {
-	for _, v := range strings.Split(s, ",") {
+func parseConfigList(s string, list any, configName string) error {
+	for v := range strings.SplitSeq(s, ",") {
 		switch list := list.(type) {
 		case *[]int64:
 			i, err := strconv.ParseInt(v, 10, 64)
 			if err != nil {
-				return fmt.Errorf("%s format error: %v", configName, err)
+				return fmt.Errorf("%s format error: %w", configName, err)
 			}
 			*list = append(*list, i)
 		case *[]float64:
 			f, err := strconv.ParseFloat(v, 64)
 			if err != nil {
-				return fmt.Errorf("%s format error: %v", configName, err)
+				return fmt.Errorf("%s format error: %w", configName, err)
 			}
 			*list = append(*list, f)
 		}
@@ -349,73 +561,26 @@ func parseConfigList(s string, list interface{}, configName string) error {
 	return nil
 }
 
-func GetUserOwner(user *userv1.User) string {
-	own := user.Annotations[userv1.UserAnnotationOwnerKey]
-	if own == "" {
-		return user.Name
-	}
-	return own
-}
-
 const BaseUnit = 1_000_000
 
-func (r *AccountReconciler) getAmountWithRates(amount int64, account *pkgtypes.Account) (amt int64, err error) {
-	//userActivities, err := pkgtypes.ParseUserActivities(account.Annotations)
-	//if err != nil {
-	//	return nil, 0, fmt.Errorf("parse user activities failed: %w", err)
-	//}
-	//
-	//rechargeDiscount := pkgtypes.RechargeDiscount{
-	//	DiscountSteps: r.RechargeStep,
-	//	DiscountRates: r.RechargeRatio,
-	//}
-	//if len(userActivities) > 0 {
-	//	if activityType, phase, _ := pkgtypes.GetUserActivityDiscount(r.Activities, &userActivities); phase != nil {
-	//		if len(phase.RechargeDiscount.DiscountSteps) > 0 {
-	//			rechargeDiscount.DiscountSteps = phase.RechargeDiscount.DiscountSteps
-	//			rechargeDiscount.DiscountRates = phase.RechargeDiscount.DiscountRates
-	//		}
-	//		rechargeDiscount.SpecialDiscount = phase.RechargeDiscount.SpecialDiscount
-	//		rechargeDiscount = phase.RechargeDiscount
-	//		currentPhase := userActivities[activityType].Phases[userActivities[activityType].CurrentPhase]
-	//		anno = pkgtypes.SetUserPhaseRechargeTimes(account.Annotations, activityType, currentPhase.Name, currentPhase.RechargeNums+1)
-	//	}
-	//}
-	//return anno, getAmountWithDiscount(amount, rechargeDiscount), nil
-
-	discount, err := r.AccountV2.GetUserAccountRechargeDiscount(&pkgtypes.UserQueryOpts{UID: account.UserUID})
-	if err != nil {
-		return 0, fmt.Errorf("get user %s account recharge discount failed: %w", account.UserUID, err)
+func getFirstRechargeDiscount(amount int64, discount pkgtypes.UserRechargeDiscount) (bool, int64) {
+	if discount.FirstRechargeSteps != nil && discount.FirstRechargeSteps[amount/BaseUnit] > 0 {
+		return true, discount.FirstRechargeSteps[amount/BaseUnit] * BaseUnit
 	}
-	if discount == nil || discount.DiscountSteps == nil || discount.DiscountRates == nil {
-		return getAmountWithDiscount(amount, r.DefaultDiscount), nil
+	if discount.DefaultSteps != nil {
+		return false, discount.DefaultSteps[amount/BaseUnit] * BaseUnit
 	}
-	return getAmountWithDiscount(amount, *discount), nil
-}
-
-func getAmountWithDiscount(amount int64, discount pkgtypes.RechargeDiscount) int64 {
-	if discount.SpecialDiscount != nil && discount.SpecialDiscount[amount/BaseUnit] != 0 {
-		return amount + discount.SpecialDiscount[amount/BaseUnit]*BaseUnit
-	}
-	var r float64
-	for i, s := range discount.DiscountSteps {
-		if amount >= s*BaseUnit {
-			r = discount.DiscountRates[i]
-		} else {
-			break
-		}
-	}
-	return int64(math.Ceil(float64(amount) * r / 100))
+	return false, 0
 }
 
 func (r *AccountReconciler) BillingCVM() error {
 	cvmMap, err := r.CVMDBClient.GetPendingStateInstance(os.Getenv("LOCAL_REGION"))
 	if err != nil {
-		return fmt.Errorf("get pending state instance failed: %v", err)
+		return fmt.Errorf("get pending state instance failed: %w", err)
 	}
-	for userInfo, cvms := range cvmMap {
-		fmt.Println("billing cvm", userInfo, cvms)
-		userUID, namespace := strings.Split(userInfo, "/")[0], strings.Split(userInfo, "/")[1]
+	for userUID, cvms := range cvmMap {
+		fmt.Println("billing cvm", userUID, cvms)
+		// userUID, namespace := strings.Split(userInfo, "/")[0], strings.Split(userInfo, "/")[1]
 		appCosts := make([]resources.AppCost, len(cvms))
 		cvmTotalAmount := 0.0
 		cvmIDs := make([]primitive.ObjectID, len(cvms))
@@ -432,21 +597,21 @@ func (r *AccountReconciler) BillingCVM() error {
 		userQueryOpts := pkgtypes.UserQueryOpts{UID: uuid.MustParse(userUID)}
 		user, err := r.AccountV2.GetUserCr(&userQueryOpts)
 		if err != nil {
-			if err == gorm.ErrRecordNotFound {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
 				fmt.Println("user not found", userQueryOpts)
 				continue
 			}
-			return fmt.Errorf("get user failed: %v", err)
+			return fmt.Errorf("get user failed: %w", err)
 		}
 		id, err := gonanoid.New(12)
 		if err != nil {
-			return fmt.Errorf("generate billing id error: %v", err)
+			return fmt.Errorf("generate billing id error: %w", err)
 		}
 		billing := &resources.Billing{
 			OrderID:   id,
 			AppCosts:  appCosts,
 			Type:      accountv1.Consumption,
-			Namespace: namespace,
+			Namespace: "ns-" + user.CrName,
 			AppType:   resources.AppType[resources.CVM],
 			Amount:    int64(cvmTotalAmount * BaseUnit),
 			Owner:     user.CrName,
@@ -454,19 +619,24 @@ func (r *AccountReconciler) BillingCVM() error {
 			Status:    resources.Settled,
 			Detail:    "{" + strings.Join(cvmIDsDetail, ",") + "}",
 		}
-		err = r.AccountV2.AddDeductionBalanceWithFunc(&pkgtypes.UserQueryOpts{UID: user.UserUID}, billing.Amount, func() error {
-			if saveErr := r.DBClient.SaveBillings(billing); saveErr != nil {
-				return fmt.Errorf("save billing failed: %v", saveErr)
-			}
-			return nil
-		}, func() error {
-			if saveErr := r.CVMDBClient.SetDoneStateInstance(cvmIDs...); saveErr != nil {
-				return fmt.Errorf("set done state instance failed: %v", saveErr)
-			}
-			return nil
-		})
+		err = r.AccountV2.AddDeductionBalanceWithFunc(
+			&pkgtypes.UserQueryOpts{UID: user.UserUID},
+			billing.Amount,
+			func() error {
+				if saveErr := r.DBClient.SaveBillings(billing); saveErr != nil {
+					return fmt.Errorf("save billing failed: %w", saveErr)
+				}
+				return nil
+			},
+			func() error {
+				if saveErr := r.CVMDBClient.SetDoneStateInstance(cvmIDs...); saveErr != nil {
+					return fmt.Errorf("set done state instance failed: %w", saveErr)
+				}
+				return nil
+			},
+		)
 		if err != nil {
-			return fmt.Errorf("add balance failed: %v", err)
+			return fmt.Errorf("add balance failed: %w", err)
 		}
 		fmt.Printf("billing cvm success %#+v\n", billing)
 	}

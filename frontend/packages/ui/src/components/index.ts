@@ -34,7 +34,10 @@ import SettingIcon from './icons/SettingIcon';
 import LogoutIcon from './icons/LogoutIcon';
 import GithubIcon from './icons/GithubIcon';
 import GoogleIcon from './icons/GoogleIcon';
+import DocsIcon from './icons/DocsIcon';
+import NotificationIcon from './icons/NotificationIcon';
 import WechatIcon from './icons/WechatIcon';
+import WarnTriangleIcon from './icons/WarnTriangleIcon';
 import ListIcon from './icons/ListIcon';
 import PortIcon from './icons/PortIcon';
 import WarnIcon from './icons/WarnIcon';
@@ -47,6 +50,8 @@ import useMessage from './Message/index';
 import EditTabs from './EditTabs';
 import YamlCode from './YamlCode';
 import ProviderIcon from './icons/ProviderIcon';
+import WarnTriangeIcon from './icons/line/WarnTriange';
+import CurrencySymbol from './icons/CurrencySymbol';
 
 export { SealosMenu } from './Menu';
 export { Tabs } from './Tabs';
@@ -58,9 +63,11 @@ export { MySlider } from './MySlider';
 export { MyTable } from './MyTable';
 
 import MySelect from './Select';
+import AutoComplete from './AutoComplete';
 
 export {
   MySelect,
+  AutoComplete,
   SealosCoin,
   WarningIcon,
   useMessage,
@@ -84,6 +91,7 @@ export {
   FileIcon,
   FolderIcon,
   GroupAddIcon,
+  WarnTriangleIcon,
   GithubIcon,
   GoogleIcon,
   InfoCircleIcon,
@@ -104,10 +112,14 @@ export {
   VisibityIcon,
   WechatIcon,
   PortIcon,
+  NotificationIcon,
+  DocsIcon,
   WarnIcon,
   CloseIcon,
   SortPolygonUpIcon,
   SortPolygonDownIcon,
   ProviderIcon,
-  WebHostIcon
+  WebHostIcon,
+  WarnTriangeIcon,
+  CurrencySymbol
 };

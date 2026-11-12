@@ -1,13 +1,8 @@
-import { authSession } from '@/service/backend/auth';
+import { makeAPIClientByHeader } from '@/service/backend/region';
 import { jsonRes } from '@/service/backend/response';
 import type { NextApiRequest, NextApiResponse } from 'next';
 export default async function handler(req: NextApiRequest, resp: NextApiResponse) {
   try {
-    const kc = await authSession(req.headers);
-    const user = kc.getCurrentUser();
-    if (user === null) {
-      return jsonRes(resp, { code: 403, message: 'user null' });
-    }
     const { endTime, startTime } = req.body as {
       endTime?: Date;
       startTime?: Date;
@@ -22,23 +17,18 @@ export default async function handler(req: NextApiRequest, resp: NextApiResponse
         code: 400,
         message: 'endTime is invalid'
       });
-    const url = process.env.BILLING_URI + '/account/v1alpha1/namespaces';
-    const res = await (
-      await fetch(url, {
-        method: 'POST',
-        body: JSON.stringify({
-          endTime,
-          kubeConfig: kc.exportConfig(),
-          owner: user.name,
-          startTime,
-          type: 0
-        })
-      })
-    ).json();
+    const client = await makeAPIClientByHeader(req, resp);
+    if (!client) return;
+    const res = await client.post('/account/v1alpha1/namespaces', {
+      endTime,
+      startTime,
+      type: 0
+    });
+    const data = res.data;
     return jsonRes(resp, {
       code: 200,
-      data: res.data,
-      message: res.message
+      data: data.data,
+      message: data.message
     });
   } catch (error) {
     console.log(error);

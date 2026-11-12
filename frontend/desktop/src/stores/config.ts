@@ -1,30 +1,45 @@
-import { getSystemConfig } from '@/api/platform';
-import { SystemConfigType } from '@/types';
+import { getAppConfig } from '@/api/platform';
+import {
+  AuthClientConfigType,
+  CloudConfigType,
+  CommonClientConfigType,
+  LayoutConfigType,
+  TrackingConfigType
+} from '@/types';
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
 
-export let BackgroundImageUrl = '/images/bg-blue.svg';
-export let ImageFallBackUrl = '/logo.svg';
-
 type State = {
-  systemConfig: SystemConfigType | undefined;
-  initSystemConfig: () => Promise<SystemConfigType>;
+  cloudConfig?: CloudConfigType;
+  authConfig?: AuthClientConfigType;
+  commonConfig?: CommonClientConfigType;
+  layoutConfig?: LayoutConfigType;
+  trackingConfig?: TrackingConfigType;
+  isLoaded: boolean;
+  initAppConfig: () => Promise<void>;
 };
 
-export const useSystemConfigStore = create<State>()(
+export const useConfigStore = create<State>()(
   devtools(
     immer((set, get) => ({
-      systemConfig: undefined,
-      async initSystemConfig() {
-        const data = await getSystemConfig();
-        BackgroundImageUrl = data.data?.backgroundImageUrl;
-        ImageFallBackUrl = data.data?.imageFallBackUrl;
-
+      cloudConfig: undefined,
+      authConfig: undefined,
+      commonConfig: undefined,
+      layoutConfig: undefined,
+      trackingConfig: undefined,
+      isLoaded: false,
+      async initAppConfig() {
+        const data = await getAppConfig();
+        console.log('initAppConfig', data.data);
         set((state) => {
-          state.systemConfig = data.data;
+          state.trackingConfig = data.data.tracking;
+          state.layoutConfig = data.data.desktop.layout;
+          state.authConfig = data.data.desktop.auth;
+          state.cloudConfig = data.data.cloud;
+          state.commonConfig = data.data.common;
+          state.isLoaded = true;
         });
-        return data.data;
       }
     }))
   )

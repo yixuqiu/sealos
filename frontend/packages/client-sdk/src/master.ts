@@ -1,25 +1,60 @@
 import { API_NAME } from './constants';
 import type {
   AppSendMessageType,
+  MasterOptions,
   MasterReplyMessageType,
   MasterSendMessageType,
   Session,
-  SessionV1
+  SessionV1,
+  WorkspaceQuotaItem
 } from './types';
 import { isBrowser } from './utils';
 import { getCookie } from './utils/cookieUtils';
 
 class MasterSDK {
-  private readonly eventBus = new Map<string, (e?: any) => any>();
+  private readonly eventBus = new Map<
+    string,
+    (e?: any, sender?: { source: MessageEventSource; origin: string }) => any
+  >();
+  private readonly allowedOrigins: string[] = [];
+  private readonly getWorkspaceQuotaApi: () => Promise<WorkspaceQuotaItem[]>;
+  private readonly getHostConfigApi: MasterOptions['getHostConfigApi'];
+
   private readonly apiFun: {
     [key: string]: (data: AppSendMessageType, source: MessageEventSource, origin: string) => void;
   } = {
     [API_NAME.USER_GET_INFO]: (data, source, origin) => this.getUserInfo(data, source, origin),
     [API_NAME.EVENT_BUS]: (data, source, origin) => this.runEventBus(data, source, origin),
-    [API_NAME.GET_LANGUAGE]: (data, source, origin) => this.getLanguage(data, source, origin)
+    [API_NAME.GET_LANGUAGE]: (data, source, origin) => this.getLanguage(data, source, origin),
+    [API_NAME.GET_WORKSPACE_QUOTA]: (data, source, origin) =>
+      this.getWorkspaceQuota(data, source, origin),
+    [API_NAME.GET_HOST_CONFIG]: (data, source, origin) => this.getHostConfig(data, source, origin)
   };
 
-  constructor() {}
+  constructor(options: MasterOptions) {
+    this.allowedOrigins = options.allowedOrigins;
+    this.getWorkspaceQuotaApi = options.getWorkspaceQuotaApi;
+    this.getHostConfigApi = options.getHostConfigApi;
+  }
+
+  /**
+   * Check if origin is in the allowed list
+   * Support wildcard '*' to allow all origins
+   */
+  private isOriginAllowed(origin: string): boolean {
+    if (origin === window.location.origin) {
+      return true;
+    }
+
+    if (this.allowedOrigins.length > 0) {
+      if (this.allowedOrigins.includes('*')) {
+        return true;
+      }
+      return this.allowedOrigins.includes(origin);
+    }
+
+    return false;
+  }
 
   private replyAppMessage({
     source,
@@ -29,6 +64,12 @@ class MasterSDK {
     message = '',
     data = {}
   }: MasterReplyMessageType) {
+    // Verify origin
+    if (!this.isOriginAllowed(origin)) {
+      console.error('Unauthorized origin trying to access:', origin);
+      return;
+    }
+
     // if not define source or source is self(Not need send message to self). Skip it
     if (!source || source === window) return;
 
@@ -60,18 +101,25 @@ class MasterSDK {
         avatar: session.user.avatar,
         nsid: session.user.nsid
       },
+      subscription: session.subscription,
       token: session.token,
       kubeconfig: session.kubeconfig
     };
   }
 
   /**
-   * run in hook
+   * Initialize message listener
    */
   init() {
     console.log('init desktop onmessage');
 
     const windowMessage = ({ data, origin, source }: MessageEvent<AppSendMessageType>) => {
+      // Verify origin
+      if (!this.isOriginAllowed(origin)) {
+        console.error('Unauthorized origin trying to access:', origin);
+        return;
+      }
+
       const { apiName, messageId } = data || {};
 
       if (!source) return;
@@ -111,9 +159,12 @@ class MasterSDK {
   }
 
   /**
-   * add event bus
+   * Add event listener
    */
-  addEventListen(name: string, fn: (e?: any) => any) {
+  addEventListen(
+    name: string,
+    fn: (e?: any, sender?: { source: MessageEventSource; origin: string }) => any
+  ) {
     if (this.eventBus.has(name)) {
       console.error('event bus name repeat');
       return;
@@ -128,14 +179,14 @@ class MasterSDK {
   }
 
   /**
-   * remove event bus
+   * Remove event listener
    */
   removeEventListen(name: string) {
     this.eventBus.delete(name);
   }
 
   /**
-   * run event bus function
+   * Execute event bus function
    */
   private async runEventBus(data: AppSendMessageType, source: MessageEventSource, origin: string) {
     const {
@@ -151,7 +202,7 @@ class MasterSDK {
         message: 'event is not register'
       });
     }
-    const res = await this.eventBus.get(eventName)?.(eventData);
+    const res = await this.eventBus.get(eventName)?.(eventData, { source, origin });
     this.replyAppMessage({
       source,
       origin,
@@ -162,9 +213,22 @@ class MasterSDK {
   }
 
   /**
-   * return session to app
+   * Return session to app
    */
   private getUserInfo(data: AppSendMessageType, source: MessageEventSource, origin: string) {
+    // Verify origin is allowed
+    if (!this.isOriginAllowed(origin)) {
+      console.error('Unauthorized origin trying to access session:', origin);
+      this.replyAppMessage({
+        source,
+        origin,
+        messageId: data.messageId,
+        success: false,
+        message: 'unauthorized origin'
+      });
+      return;
+    }
+
     if (this.session) {
       this.replyAppMessage({
         source,
@@ -185,9 +249,22 @@ class MasterSDK {
   }
 
   /**
-   * return desktop  language
+   * Return desktop language
    */
   private getLanguage(data: AppSendMessageType, source: MessageEventSource, origin: string) {
+    // Verify origin is allowed
+    if (!this.isOriginAllowed(origin)) {
+      console.error('Unauthorized origin trying to access language:', origin);
+      this.replyAppMessage({
+        source,
+        origin,
+        messageId: data.messageId,
+        success: false,
+        message: 'unauthorized origin'
+      });
+      return;
+    }
+
     if (this.session) {
       this.replyAppMessage({
         source,
@@ -195,7 +272,7 @@ class MasterSDK {
         messageId: data.messageId,
         success: true,
         data: {
-          lng: getCookie('NEXT_LOCALE') || 'zh'
+          lng: getCookie('NEXT_LOCALE') || 'en'
         }
       });
     } else {
@@ -209,26 +286,123 @@ class MasterSDK {
     }
   }
 
+  private async getWorkspaceQuota(
+    data: AppSendMessageType,
+    source: MessageEventSource,
+    origin: string
+  ) {
+    // Verify origin is allowed
+    if (!this.isOriginAllowed(origin)) {
+      console.error('Unauthorized origin trying to access language:', origin);
+      this.replyAppMessage({
+        source,
+        origin,
+        messageId: data.messageId,
+        success: false,
+        message: 'unauthorized origin'
+      });
+      return;
+    }
+
+    if (this.session) {
+      this.replyAppMessage({
+        source,
+        origin,
+        messageId: data.messageId,
+        success: true,
+        data: {
+          quota: await this.getWorkspaceQuotaApi()
+        }
+      });
+    } else {
+      this.replyAppMessage({
+        source,
+        origin,
+        messageId: data.messageId,
+        success: false,
+        message: 'no login in'
+      });
+    }
+  }
+
+  private async getHostConfig(
+    data: AppSendMessageType,
+    source: MessageEventSource,
+    origin: string
+  ) {
+    // Verify origin is allowed
+    if (!this.isOriginAllowed(origin)) {
+      console.error('Unauthorized origin trying to access host config:', origin);
+      this.replyAppMessage({
+        source,
+        origin,
+        messageId: data.messageId,
+        success: false,
+        message: 'unauthorized origin'
+      });
+      return;
+    }
+
+    if (this.getHostConfigApi) {
+      try {
+        const config = await this.getHostConfigApi();
+        this.replyAppMessage({
+          source,
+          origin,
+          messageId: data.messageId,
+          success: true,
+          data: config
+        });
+      } catch (error) {
+        this.replyAppMessage({
+          source,
+          origin,
+          messageId: data.messageId,
+          success: false,
+          message: error instanceof Error ? error.message : 'failed to get host config'
+        });
+      }
+    } else {
+      this.replyAppMessage({
+        source,
+        origin,
+        messageId: data.messageId,
+        success: false,
+        message: 'getHostConfigApi is not configured'
+      });
+    }
+  }
+
   /**
-   * send message to all app
+   * Send message to all apps
    */
   sendMessageToAll(data: MasterSendMessageType) {
     const iframes = document.querySelectorAll('iframe');
     for (let i = 0; i < iframes.length; i++) {
       const iframe = iframes[i];
-      iframe.contentWindow?.postMessage(data, iframe?.src);
+
+      if (!iframe?.src || iframe.src.trim() === '' || iframe.src === 'about:blank') {
+        continue;
+      }
+
+      try {
+        iframe.contentWindow?.postMessage(data, iframe.src);
+      } catch (error) {
+        console.error('postMessage error:', error);
+      }
     }
   }
 }
 
 export let masterApp: MasterSDK;
 
-export const createMasterAPP = () => {
+export const createMasterAPP = (options: MasterOptions) => {
   if (!isBrowser()) {
     console.error('This method need run in the browser.');
     return;
   }
-  masterApp = new MasterSDK();
+
+  masterApp = new MasterSDK(options);
 
   return masterApp.init();
 };

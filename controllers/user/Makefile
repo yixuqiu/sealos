@@ -2,9 +2,11 @@
 # Image URL to use all building/pushing image targets
 IMG ?= ghcr.io/labring/sealos-user-controller:latest
 TARGETARCH ?= amd64
+LICENSE_KEY ?=
+CONTROLLER_LICENSE_PKG=github.com/labring/sealos/controllers/pkg/license
 
 # ENVTEST_K8S_VERSION refers to the version of kubebuilder assets to be downloaded by envtest binary.
-ENVTEST_K8S_VERSION = 1.25.6
+ENVTEST_K8S_VERSION = 1.25.0
 
 # Get the currently used golang install path (in GOPATH/bin, unless GOBIN is set)
 ifeq (,$(shell go env GOBIN))
@@ -44,6 +46,7 @@ help: ## Display this help.
 .PHONY: manifests
 manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and CustomResourceDefinition objects.
 	$(CONTROLLER_GEN) rbac:roleName=manager-role crd webhook paths="./..." output:crd:artifacts:config=config/crd/bases
+	cp -r config/crd/bases/* deploy/charts/user/crds/
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
@@ -58,14 +61,18 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests generate fmt vet envtest ## Run tests.
-	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test ./... -coverprofile cover.out
+test: envtest ## Run tests.
+	@LD_FLAGS=""; \
+	[ -n "$(LICENSE_KEY)" ] && LD_FLAGS="-X ${CONTROLLER_LICENSE_PKG}.encryptionKey=${LICENSE_KEY}"; \
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) -p path)" go test -race -ldflags "$${LD_FLAGS}" ./... -count=1
 
 ##@ Build
 
 .PHONY: build
 build:  ## Build manager binary.
-	CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o bin/manager main.go
+	LD_FLAGS="-s -w"; \
+	[ -n "$(LICENSE_KEY)" ] && LD_FLAGS+=" -X ${CONTROLLER_LICENSE_PKG}.encryptionKey=${LICENSE_KEY}"; \
+	CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -ldflags "$${LD_FLAGS}" -trimpath -o bin/manager main.go
 
 .PHONY: run
 run: manifests generate fmt vet ## Run a controller from your host.
@@ -123,8 +130,8 @@ CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
 
 ## Tool Versions
-KUSTOMIZE_VERSION ?= v3.8.7
-CONTROLLER_TOOLS_VERSION ?= v0.10.0
+KUSTOMIZE_VERSION ?= v5.3.0
+CONTROLLER_TOOLS_VERSION ?= v0.14.0
 
 KUSTOMIZE_INSTALL_SCRIPT ?= "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh"
 .PHONY: kustomize

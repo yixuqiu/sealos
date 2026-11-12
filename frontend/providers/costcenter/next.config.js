@@ -13,13 +13,13 @@ const nextConfig = {
   i18n,
   reactStrictMode: false,
   output: 'standalone',
-  transpilePackages: ['echarts', 'sealos@ui'],
+  transpilePackages: ['echarts', 'sealos@ui', '@sealos/shadcn-ui'],
   experimental: {
     // this includes files from the monorepo base two directories up
-    outputFileTracingRoot: path.join(__dirname, '../../')
+    outputFileTracingRoot: path.join(__dirname, '../../'),
+    instrumentationHook: true
   },
   async headers() {
-    console.log(ContentSecurityPolicy.replace(/\s{2,}/g, ' ').trim());
     return [
       {
         source: '/',
@@ -38,15 +38,15 @@ const nextConfig = {
             value: ContentSecurityPolicy.replace(/\s{2,}/g, ' ').trim()
           }
         ]
-      }
-    ];
-  },
-  async redirects() {
-    return [
+      },
       {
-        source: '/',
-        destination: '/cost_overview',
-        permanent: true
+        source: '/plan',
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value: ContentSecurityPolicy.replace(/\s{2,}/g, ' ').trim()
+          }
+        ]
       }
     ];
   }

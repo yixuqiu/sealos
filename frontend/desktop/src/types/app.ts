@@ -8,7 +8,12 @@ export enum APPTYPE {
 }
 
 export type WindowSize = 'maximize' | 'maxmin' | 'minimize';
-export type displayType = 'normal' | 'hidden' | 'more ';
+export type displayType = 'normal' | 'hidden' | 'more';
+export type TForcedIconStyle = 'contain' | 'fill';
+export type TRepresentativeMeta = {
+  forcedIconStyle: TForcedIconStyle;
+};
+
 export type TAppFront = {
   isShow: boolean;
   zIndex: number;
@@ -21,6 +26,11 @@ export type TAppFront = {
     bg?: string;
   };
   mouseDowning: boolean;
+};
+
+export type TAppMenuData = {
+  name: string;
+  link: string;
 };
 
 export type TAppConfig = {
@@ -41,13 +51,16 @@ export type TAppConfig = {
   gallery?: string[];
   extra?: {};
   // app top info
-  menuData?: {
-    nameColor: string;
-    helpDropDown: boolean;
-    helpDocs: boolean | string;
+  menuData?: TAppMenuData[];
+  i18n?: {
+    [key: string]: {
+      name: string;
+    };
   };
-  i18n?: any;
+  representativeMeta: TRepresentativeMeta;
   displayType: displayType;
+  position?: number;
+  creationTimestamp?: string;
 };
 
 export type TApp = TAppConfig & TAppFront & { pid: number };
@@ -58,11 +71,27 @@ export type TOSState = {
   runner: AppStateManager;
   runningInfo: AppInfo[];
   currentAppPid: number;
+  currentAppKey: string;
   autolaunch: string;
-  launchQuery: Record<string, string>;
+  autolaunchWorkspaceUid?: string;
+  launchQuery: {
+    raw?: string;
+    pathname?: string;
+  };
+  autoDeployTemplate: string;
+  autoDeployTemplateForm?: Record<string, any>;
   // store deploy template
-  setAutoLaunch: (autolaunch: string, launchQuery: Record<string, string>) => void;
+  setAutoLaunch: (
+    autolaunch: string,
+    launchQuery: {
+      raw?: string;
+      pathname?: string;
+    },
+    autolaunchWorkspaceId?: string
+  ) => void;
   cancelAutoLaunch: () => void;
+  setAutoDeployTemplate: (templateName: string, templateForm: Record<string, any>) => void;
+  cancelAutoDeployTemplate: () => void;
   // init desktop
   init(): Promise<TOSState>;
   // open app
@@ -85,4 +114,11 @@ export type TOSState = {
   setToHighestLayerById: (pid: number) => void;
   updateOpenedAppInfo: (app: TApp) => void;
   deleteLeastUsedAppByIndex: () => void;
+  openDesktopApp: (options: {
+    appKey: string;
+    query?: Record<string, string>;
+    messageData?: Record<string, any>;
+    pathname: string;
+    appSize?: WindowSize;
+  }) => void;
 };
